@@ -15,12 +15,12 @@ export function HomePage() {
           width={1280}
           height={1231}
           fetchPriority="high"
-          className="absolute inset-0 -z-20 size-full object-cover object-[center_60%]"
+          className="absolute inset-0 -z-20 size-full object-cover object-bottom"
         />
         {/* Darkens the bright photo for legible text and fades into the page background. */}
         <div
           aria-hidden="true"
-          className="absolute inset-0 -z-10 bg-linear-to-b from-black/55 via-black/45 to-background"
+          className="absolute inset-0 -z-10 bg-linear-to-b from-black/55 via-black/30 via-70% to-background"
         />
 
         <div>
