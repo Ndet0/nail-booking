@@ -1,5 +1,9 @@
 -- Local development seed. PLACEHOLDER prices and durations: to be confirmed by Chao.
 -- Source: docs/BUSINESS_RULES.md §4. Prices are KES minor units (KES 1,500 = 150000).
+-- Clear rows that reference services so this file can be re-run after the scheduling migration.
+DELETE FROM appointment_slot_reservations;
+DELETE FROM appointments;
+DELETE FROM staff_services;
 DELETE FROM services;
 
 INSERT INTO services (id, slug, name, description, category, duration_minutes, price_minor, currency, is_active, display_order) VALUES

@@ -31,7 +31,7 @@ Prerequisites: Node.js 22+ (see `.nvmrc`) and pnpm 11 (`corepack enable`).
 ```bash
 pnpm install
 pnpm db:migrate:local   # apply D1 migrations to the local database (.wrangler/)
-pnpm db:seed:local      # load placeholder services
+pnpm db:seed:local      # load placeholder services, then Chao's proposed weekly hours
 pnpm dev                # API on http://localhost:8787, web on http://localhost:5173
 ```
 

@@ -11,6 +11,9 @@ function request(path: string, init?: RequestInit) {
 
 beforeAll(async () => {
   await env.DB.batch([
+    env.DB.prepare("DELETE FROM appointment_slot_reservations"),
+    env.DB.prepare("DELETE FROM appointments"),
+    env.DB.prepare("DELETE FROM staff_services"),
     env.DB.prepare("DELETE FROM services"),
     env.DB.prepare(
       `INSERT INTO services (id, slug, name, category, duration_minutes, price_minor, currency, is_active, display_order) VALUES
@@ -70,6 +73,46 @@ describe("GET /services", () => {
 });
 
 describe("database constraints", () => {
+  it("rejects a second reservation for the same staff member and slot", async () => {
+    await env.DB.batch([
+      env.DB.prepare("DELETE FROM appointment_slot_reservations"),
+      env.DB.prepare("DELETE FROM appointments"),
+      env.DB.prepare("DELETE FROM staff WHERE id = 'staff_t'"),
+      env.DB.prepare("INSERT INTO staff (id, name) VALUES ('staff_t', 'Test')"),
+      env.DB.prepare(
+        `INSERT INTO appointments (
+          id, booking_reference, customer_name, customer_phone, staff_id, service_id,
+          service_name_snapshot, duration_minutes_snapshot, price_minor_snapshot,
+          start_at, end_at, location
+        ) VALUES
+          (
+            'apt_1', 'ref_1', 'Amina', '0712345678', 'staff_t', 'svc_a', 'Gel Polish', 60, 150000,
+            '2026-10-28T06:00:00.000Z', '2026-10-28T07:00:00.000Z', 'studio'
+          ),
+          (
+            'apt_2', 'ref_2', 'Bella', '0722345678', 'staff_t', 'svc_a', 'Gel Polish', 60, 150000,
+            '2026-10-28T08:00:00.000Z', '2026-10-28T09:00:00.000Z', 'studio'
+          )`,
+      ),
+      env.DB.prepare(
+        `INSERT INTO appointment_slot_reservations (staff_id, slot_start_at, appointment_id)
+         VALUES ('staff_t', '2026-10-28T06:00:00.000Z', 'apt_1')`,
+      ),
+    ]);
+
+    await expect(
+      env.DB.prepare(
+        `INSERT INTO appointment_slot_reservations (staff_id, slot_start_at, appointment_id)
+         VALUES ('staff_t', '2026-10-28T06:00:00.000Z', 'apt_2')`,
+      ).run(),
+    ).rejects.toThrow(/UNIQUE constraint failed/);
+
+    await env.DB.prepare(
+      `INSERT INTO appointment_slot_reservations (staff_id, slot_start_at, appointment_id)
+       VALUES ('staff_t', '2026-10-28T06:15:00.000Z', 'apt_2')`,
+    ).run();
+  });
+
   it("rejects a non-positive duration", async () => {
     await expect(
       env.DB.prepare(
