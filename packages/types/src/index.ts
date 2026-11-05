@@ -26,6 +26,25 @@ export type ServiceDto = {
   currency: string;
 };
 
+export type AppointmentLocation = "studio" | "house_call";
+
+/** A bookable service time. Instants are UTC ISO strings; buffers are not included. */
+export type AvailabilitySlotDto = {
+  startAt: string;
+  endAt: string;
+};
+
+export type AvailabilityDto = {
+  serviceId: string;
+  /** `YYYY-MM-DD` in the studio timezone. */
+  date: string;
+  location: AppointmentLocation;
+  timezone: string;
+  /** Last date customers can book, in the studio timezone. */
+  lastBookableDate: string;
+  slots: AvailabilitySlotDto[];
+};
+
 export type HealthDto = {
   status: "ok" | "degraded";
   db: "ok" | "error";

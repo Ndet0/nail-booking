@@ -58,6 +58,9 @@ These values live in `apps/api/src/config/studio.ts`. Change them there and here
   - Studio booking: service duration, then the turnaround buffer.
   - House call: the travel buffer before, the service duration, then the travel buffer after. The turnaround buffer is not added on top.
 - The appointment's `start_at` and `end_at` are the service itself, without buffers. That is what the customer sees.
+- The whole block, buffers included, must fit inside one working period. A house call at opening time therefore starts one travel buffer after opening. With split shifts, a block cannot span the gap between two periods.
+- The minimum lead time applies to the service start, not the travel buffer before it.
+- Customers can book from today up to the maximum advance window, counted in Nairobi dates. Earlier or later dates are rejected.
 - `pending` and `confirmed` bookings block availability. Cancelling a booking deletes its reservations in the same operation as the status change. `completed` and `no_show` bookings keep theirs as a record.
 - House-call bookings must include an address.
 

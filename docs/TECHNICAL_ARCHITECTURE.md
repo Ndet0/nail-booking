@@ -514,6 +514,35 @@ Use a versioned REST API under `/api/v1`.
 
 The booking lookup must not expose private appointment details based only on a predictable ID. Use an unguessable reference plus an appropriate verification mechanism, such as a secure management token or verified customer identity.
 
+#### `GET /api/v1/availability`
+
+| Query parameter | Rule |
+|---|---|
+| `serviceId` | Required. Must be an active service. |
+| `date` | Required. A real `YYYY-MM-DD` date in the studio timezone, from today up to the maximum advance window. |
+| `location` | `studio` (default) or `house_call`. House calls add travel buffers before and after the service. |
+
+```json
+{
+  "data": {
+    "serviceId": "svc_gel",
+    "date": "2026-11-10",
+    "location": "studio",
+    "timezone": "Africa/Nairobi",
+    "lastBookableDate": "2027-01-04",
+    "slots": [{ "startAt": "2026-11-10T06:00:00.000Z", "endAt": "2026-11-10T07:00:00.000Z" }]
+  }
+}
+```
+
+- Slot times cover the service only, without buffers, and are UTC instants. Clients display them in `timezone`.
+- A time is listed if any eligible active staff member is free. Staff are not exposed, and booking creation picks the staff member.
+- Errors:
+  - `400 validation_error` for malformed parameters.
+  - `400 date_out_of_range` for dates outside the booking window.
+  - `404 service_not_found` for unknown or inactive services.
+- Implementation: `apps/api/src/modules/availability/`. The pure engine (`availability.engine.ts`) also exports `reservationSlots`. Booking creation must use that same function when it writes reservation rows, so availability and conflict locking agree.
+
 ### Admin endpoints
 
 | Method | Endpoint | Purpose |

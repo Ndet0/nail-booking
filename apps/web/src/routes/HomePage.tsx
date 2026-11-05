@@ -60,7 +60,7 @@ export function HomePage() {
           <h2 className="mb-6 text-2xl font-semibold">Services</h2>
           <ServiceList />
           <p className="mt-6 text-xs text-muted">
-            Online booking is coming soon. Prices are indicative and may vary with design.
+            Tap Book to see available times. Prices are indicative and may vary with design.
           </p>
         </main>
 

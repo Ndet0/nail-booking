@@ -9,6 +9,14 @@ export function useServices() {
   });
 }
 
+export function useService(id: string) {
+  return useQuery({
+    queryKey: ["services", id],
+    queryFn: () => apiFetch<ServiceDto>(`/services/${encodeURIComponent(id)}`),
+    enabled: id.length > 0,
+  });
+}
+
 export function useHealth() {
   return useQuery({
     queryKey: ["health"],

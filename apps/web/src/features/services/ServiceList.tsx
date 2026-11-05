@@ -1,4 +1,5 @@
 import type { ServiceCategory, ServiceDto } from "@nailsbychao/types";
+import { Link } from "react-router";
 import { formatDuration, formatPrice } from "@/lib/format";
 import { useServices } from "./api";
 
@@ -83,9 +84,18 @@ function ServiceCard({ service }: { service: ServiceDto }) {
         {service.description && <p className="mt-1 text-sm text-muted">{service.description}</p>}
         <p className="mt-2 text-xs text-muted">{formatDuration(service.durationMinutes)}</p>
       </div>
-      <p className="shrink-0 font-semibold text-accent">
-        {formatPrice(service.priceMinor, service.currency)}
-      </p>
+      <div className="flex shrink-0 flex-col items-end gap-3">
+        <p className="font-semibold text-accent">
+          {formatPrice(service.priceMinor, service.currency)}
+        </p>
+        <Link
+          to={`/book/${encodeURIComponent(service.id)}`}
+          aria-label={`Book ${service.name}`}
+          className="rounded-full border border-accent px-4 py-1.5 text-sm font-semibold text-accent hover:bg-accent hover:text-accent-foreground"
+        >
+          Book
+        </Link>
+      </div>
     </li>
   );
 }

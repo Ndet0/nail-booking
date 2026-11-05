@@ -145,7 +145,7 @@ A task is complete when:
 - [x] Implement `GET /api/v1/services/:id`.
 - [ ] Implement service validation. *The database CHECKs reject invalid rows. The Zod schemas for service writes come with admin service management in Sprint 6.*
 - [x] Build the public service catalog page.
-- [ ] Add service detail presentation.
+- [x] Add service detail presentation. *Shown at the top of the booking page.*
 - [x] Add loading, empty, and error states.
 - [x] Test service retrieval and validation.
 
@@ -212,27 +212,27 @@ A task is complete when:
 
 ### Checklist
 
-- [ ] Implement staff service assignments.
-- [ ] Implement working-hours retrieval.
-- [ ] Implement staff time-off retrieval.
-- [ ] Define rules for breaks and studio closures.
-- [ ] Implement the studio timezone conversion utilities.
-- [ ] Implement service-duration calculations.
-- [ ] Implement cleanup or turnaround buffers, if required.
-- [ ] Define the minimum booking lead time.
-- [ ] Define the maximum advance-booking window.
-- [ ] Implement availability generation.
-- [ ] Implement `GET /api/v1/availability`.
-- [ ] Validate requested service and staff identifiers.
-- [ ] Exclude slots that cannot fit the full service duration.
-- [ ] Exclude slots blocked by existing appointments.
-- [ ] Exclude slots blocked by time off.
-- [ ] Implement the frontend date picker.
-- [ ] Display available time slots.
-- [ ] Add a clear empty state when no slots are available.
-- [ ] Test availability at opening and closing boundaries.
-- [ ] Test appointments spanning multiple scheduling increments.
-- [ ] Test changes in staff schedules and time off.
+- [x] Implement staff service assignments.
+- [x] Implement working-hours retrieval.
+- [x] Implement staff time-off retrieval.
+- [x] Define rules for breaks and studio closures. *Both are entered as staff time off.*
+- [x] Implement the studio timezone conversion utilities.
+- [x] Implement service-duration calculations.
+- [x] Implement cleanup or turnaround buffers, if required.
+- [x] Define the minimum booking lead time.
+- [x] Define the maximum advance-booking window.
+- [x] Implement availability generation.
+- [x] Implement `GET /api/v1/availability`.
+- [x] Validate requested service and staff identifiers. *Customers don't pick staff in the MVP, so the API validates the service and resolves eligible active staff itself.*
+- [x] Exclude slots that cannot fit the full service duration.
+- [x] Exclude slots blocked by existing appointments.
+- [x] Exclude slots blocked by time off.
+- [x] Implement the frontend date picker. *A scrollable day strip on `/book/:serviceId`.*
+- [x] Display available time slots.
+- [x] Add a clear empty state when no slots are available.
+- [x] Test availability at opening and closing boundaries.
+- [x] Test appointments spanning multiple scheduling increments.
+- [x] Test changes in staff schedules and time off.
 
 ### Deliverables
 
