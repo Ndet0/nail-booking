@@ -32,3 +32,12 @@ export async function listActiveServices(
     .orderBy(asc(services.displayOrder), asc(services.name));
   return rows.map(toServiceDto);
 }
+
+export async function getActiveServiceById(db: Db, id: string): Promise<ServiceDto | null> {
+  const row = await db
+    .select()
+    .from(services)
+    .where(and(eq(services.id, id), eq(services.isActive, true)))
+    .get();
+  return row ? toServiceDto(row) : null;
+}

@@ -128,6 +128,8 @@ flowchart TD
     M --> N[Display Confirmation Details]
 ```
 
+For the MVP there is a single technician, Chao (see `BUSINESS_RULES.md`). The "Choose Staff" step is skipped and bookings are assigned to her automatically. The `staff` model already exists, so the step can be added once the studio grows.
+
 ### Journey requirements
 
 - Customers must understand the service price before submitting a booking.
