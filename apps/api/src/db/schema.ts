@@ -6,7 +6,23 @@ function localTime(column: SQLWrapper) {
   return sql`${column} GLOB '[0-1][0-9]:[0-5][0-9]' OR ${column} GLOB '2[0-3]:[0-5][0-9]'`;
 }
 
+/**
+ * Canonical UTC instant `YYYY-MM-DDTHH:MM:SS.SSSZ` (what `Date#toISOString` produces).
+ * Instants are compared and keyed as text, so a single format is required for correctness.
+ * Round-trips through strftime because D1 rejects long GLOB patterns; `IS` (not `=`) makes
+ * unparseable values fail instead of yielding NULL, which a CHECK would accept.
+ */
+function utcInstant(column: SQLWrapper) {
+  return sql`strftime('%Y-%m-%dT%H:%M:%fZ', ${column}) IS ${column}`;
+}
+
+/** A canonical instant on a 15-minute boundary, e.g. `2026-10-28T06:15:00.000Z`. */
+function slotInstant(column: SQLWrapper) {
+  return sql`strftime('%Y-%m-%dT%H:%M:00.000Z', ${column}) IS ${column} AND strftime('%M', ${column}) IN ('00', '15', '30', '45')`;
+}
+
 const timestamp = sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`;
+const now = () => new Date().toISOString();
 
 export const services = sqliteTable(
   "services",
@@ -19,10 +35,12 @@ export const services = sqliteTable(
     durationMinutes: integer("duration_minutes").notNull(),
     priceMinor: integer("price_minor").notNull(),
     currency: text("currency").notNull().default("KES"),
+    /** R2 object key, not a URL. */
+    imageKey: text("image_key"),
     isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
     displayOrder: integer("display_order").notNull().default(0),
     createdAt: text("created_at").notNull().default(timestamp),
-    updatedAt: text("updated_at").notNull().default(timestamp),
+    updatedAt: text("updated_at").notNull().default(timestamp).$onUpdate(now),
   },
   (table) => [
     index("services_active_order_idx").on(table.isActive, table.displayOrder),
@@ -41,7 +59,7 @@ export const staff = sqliteTable("staff", {
   bio: text("bio"),
   isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
   createdAt: text("created_at").notNull().default(timestamp),
-  updatedAt: text("updated_at").notNull().default(timestamp),
+  updatedAt: text("updated_at").notNull().default(timestamp).$onUpdate(now),
 });
 
 export type StaffRow = typeof staff.$inferSelect;
@@ -117,6 +135,8 @@ export const staffTimeOff = sqliteTable(
   },
   (table) => [
     index("staff_time_off_staff_start_idx").on(table.staffId, table.startAt),
+    check("staff_time_off_start_at", utcInstant(table.startAt)),
+    check("staff_time_off_end_at", utcInstant(table.endAt)),
     check("staff_time_off_range", sql`${table.endAt} > ${table.startAt}`),
   ],
 );
@@ -138,6 +158,10 @@ export const appointments = sqliteTable(
   {
     id: text("id").primaryKey(),
     bookingReference: text("booking_reference").notNull().unique(),
+    /** SHA-256 of the customer's booking-management token. The reference alone grants no access. */
+    managementTokenHash: text("management_token_hash").notNull(),
+    /** Client-supplied `Idempotency-Key`; a retried submission returns the original booking. */
+    idempotencyKey: text("idempotency_key").unique(),
     customerName: text("customer_name").notNull(),
     customerEmail: text("customer_email"),
     customerPhone: text("customer_phone").notNull(),
@@ -159,11 +183,12 @@ export const appointments = sqliteTable(
     travelFeeMinor: integer("travel_fee_minor"),
     customerNotes: text("customer_notes"),
     createdAt: text("created_at").notNull().default(timestamp),
-    updatedAt: text("updated_at").notNull().default(timestamp),
+    updatedAt: text("updated_at").notNull().default(timestamp).$onUpdate(now),
   },
   (table) => [
     index("appointments_staff_start_idx").on(table.staffId, table.startAt),
     check("appointments_reference_present", sql`length(${table.bookingReference}) > 0`),
+    check("appointments_token_hash_present", sql`length(${table.managementTokenHash}) > 0`),
     check("appointments_customer_name_present", sql`length(${table.customerName}) > 0`),
     check("appointments_customer_phone_present", sql`length(${table.customerPhone}) > 0`),
     check(
@@ -174,10 +199,16 @@ export const appointments = sqliteTable(
     check("appointments_duration_positive", sql`${table.durationMinutesSnapshot} > 0`),
     check("appointments_price_non_negative", sql`${table.priceMinorSnapshot} >= 0`),
     check("appointments_currency_format", sql`length(${table.currency}) = 3`),
+    check("appointments_start_at", utcInstant(table.startAt)),
+    check("appointments_end_at", utcInstant(table.endAt)),
     check("appointments_range", sql`${table.endAt} > ${table.startAt}`),
     check(
       "appointments_travel_fee_non_negative",
       sql`${table.travelFeeMinor} IS NULL OR ${table.travelFeeMinor} >= 0`,
+    ),
+    check(
+      "appointments_house_call_address",
+      sql`${table.location} <> 'house_call' OR length(trim(coalesce(${table.address}, ''))) > 0`,
     ),
   ],
 );
@@ -185,8 +216,9 @@ export const appointments = sqliteTable(
 export type AppointmentRow = typeof appointments.$inferSelect;
 
 /**
- * One row per 15-minute increment a booking occupies.
+ * One row per 15-minute increment a booking occupies, including its buffers.
  * The primary key is the conflict lock: one staff member cannot hold the same instant twice.
+ * Cancelling only changes the appointment status, so the cancel operation must delete these rows.
  */
 export const appointmentSlotReservations = sqliteTable(
   "appointment_slot_reservations",
@@ -202,7 +234,30 @@ export const appointmentSlotReservations = sqliteTable(
   (table) => [
     primaryKey({ columns: [table.staffId, table.slotStartAt] }),
     index("appointment_slot_reservations_appointment_idx").on(table.appointmentId),
+    check("appointment_slot_reservations_slot_start_at", slotInstant(table.slotStartAt)),
   ],
 );
 
 export type AppointmentSlotReservationRow = typeof appointmentSlotReservations.$inferSelect;
+
+export const galleryImages = sqliteTable(
+  "gallery_images",
+  {
+    id: text("id").primaryKey(),
+    title: text("title"),
+    description: text("description"),
+    altText: text("alt_text").notNull(),
+    r2ObjectKey: text("r2_object_key").notNull().unique(),
+    displayOrder: integer("display_order").notNull().default(0),
+    isPublished: integer("is_published", { mode: "boolean" }).notNull().default(false),
+    createdAt: text("created_at").notNull().default(timestamp),
+    updatedAt: text("updated_at").notNull().default(timestamp).$onUpdate(now),
+  },
+  (table) => [
+    index("gallery_images_published_order_idx").on(table.isPublished, table.displayOrder),
+    check("gallery_images_alt_text_present", sql`length(${table.altText}) > 0`),
+    check("gallery_images_object_key_present", sql`length(${table.r2ObjectKey}) > 0`),
+  ],
+);
+
+export type GalleryImageRow = typeof galleryImages.$inferSelect;

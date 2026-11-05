@@ -116,6 +116,7 @@ nail-booking/
 │       │   ├── index.ts
 │       │   ├── app.ts
 │       │   ├── env.ts
+│       │   ├── config/        # studio scheduling rules (studio.ts)
 │       │   ├── middleware/
 │       │   ├── routes/
 │       │   ├── modules/
@@ -132,6 +133,7 @@ nail-booking/
 │       │   │   └── repositories/
 │       │   └── utils/
 │       ├── migrations/
+│       ├── seed/          # local development data
 │       ├── test/
 │       ├── wrangler.jsonc
 │       └── package.json
@@ -145,6 +147,7 @@ nail-booking/
 ├── docs/
 │   ├── TECHNICAL_ARCHITECTURE.md
 │   ├── PRODUCT_ARCHITECTURE.md
+│   ├── BUSINESS_RULES.md
 │   └── SPRINT.md
 │
 ├── package.json
@@ -228,7 +231,9 @@ These are optional extensions and should not block the first working version.
 
 ## 6. Database Design
 
-The following entities form the initial logical data model. Exact columns and constraints should be finalized in the implementation migrations.
+The following entities form the initial logical data model. The source of truth for columns and constraints is `apps/api/src/db/schema.ts` and the migrations generated from it.
+
+All instants (`*_at` columns) are stored as canonical UTC text in the form `YYYY-MM-DDTHH:MM:SS.SSSZ`, which is what `Date#toISOString` produces. CHECK constraints enforce this format. Because instants are compared and used as keys in text form, one consistent format is required for correctness.
 
 ### `users`
 
@@ -265,12 +270,16 @@ Stores bookable services.
 Suggested fields:
 
 - `id`
+- `slug` (unique)
 - `name`
 - `description`
+- `category` (`nails` or `makeup`)
 - `duration_minutes`
 - `price_minor`
 - `currency`
+- `image_key` (R2 object key, optional)
 - `is_active`
+- `display_order`
 - `created_at`
 - `updated_at`
 
@@ -338,7 +347,9 @@ Suggested fields:
 
 - `id`
 - `booking_reference`
-- `customer_id`, nullable for guest bookings
+- `management_token_hash`: SHA-256 of the customer's booking-management token
+- `idempotency_key`: unique and nullable, taken from the `Idempotency-Key` header
+- `customer_id`, nullable for guest bookings (not added yet; there are no customer accounts in the MVP)
 - `customer_name`
 - `customer_email`, where provided
 - `customer_phone`
@@ -351,9 +362,14 @@ Suggested fields:
 - `start_at`
 - `end_at`
 - `status`
+- `location` (`studio` or `house_call`)
+- `address` (required when `location` is `house_call`)
+- `travel_fee_minor`
 - `customer_notes`
 - `created_at`
 - `updated_at`
+
+`start_at` and `end_at` cover the service only. Buffers are expressed in the slot reservations.
 
 Snapshot fields preserve the service name, duration, and price that applied when the booking was made, even if the catalog changes later.
 
@@ -381,7 +397,14 @@ Create a unique constraint on `(staff_id, slot_start_at)`.
 
 A booking occupying multiple scheduling increments reserves every increment it needs. Reservation creation must be atomic so a partial reservation cannot be left behind if a conflict occurs.
 
-Choose a slot increment appropriate for the studio's scheduling needs, such as 5, 10, or 15 minutes. Service durations and cleanup buffers must map consistently to these increments.
+The chosen increment is **15 minutes**. A CHECK constraint requires `slot_start_at` to be a canonical instant on a :00, :15, :30, or :45 boundary. A booking reserves the slots for its service duration plus its buffers:
+
+- Studio bookings add the turnaround buffer after the service.
+- House calls add the travel buffer before and after the service.
+
+The values are defined in `apps/api/src/config/studio.ts` and documented in `BUSINESS_RULES.md`.
+
+Reservations are removed by `ON DELETE CASCADE` only when the appointment row itself is deleted. Cancelling changes the status instead, so the cancellation operation must delete the appointment's reservations in the same atomic batch.
 
 If fixed slot reservations are not appropriate for the business, use another explicitly concurrency-safe reservation strategy. Do not rely only on checking for overlapping appointments in application code before inserting a booking; concurrent requests can both pass that check.
 
@@ -394,14 +417,16 @@ Suggested fields:
 - `id`
 - `title`
 - `description`
-- `r2_object_key`
+- `alt_text`
+- `r2_object_key` (unique)
 - `display_order`
-- `is_published`
+- `is_published` (default false)
 - `created_at`
+- `updated_at`
 
 ### `audit_events`
 
-Records important administrative operations.
+Records important administrative operations. Not created yet: it is added in Sprint 6 together with the admin identity tables.
 
 Suggested fields:
 

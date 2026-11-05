@@ -15,6 +15,13 @@
       "when": 1793196475760,
       "tag": "0001_scheduling",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1793856979575,
+      "tag": "0002_hardening",
+      "breakpoints": true
     }
   ]
 }

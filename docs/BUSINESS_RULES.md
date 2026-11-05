@@ -49,6 +49,18 @@ Inspired by [Katiani Styles](https://katiani-styles.swiftill.co.ke/): dark-first
 | Deposit | Not in MVP; M-Pesa deposit is post-MVP (Sprint 9) | Proposed |
 | New booking status | `pending` until Chao confirms | **TBC** (alternative: auto-`confirmed`) |
 
+### Scheduling model
+
+These values live in `apps/api/src/config/studio.ts`. Change them there and here together.
+
+- Every booking reserves 15-minute slots in `appointment_slot_reservations`. Slot starts are stored as canonical UTC strings (`YYYY-MM-DDTHH:MM:00.000Z`) aligned to :00, :15, :30 or :45, and the database rejects any other format.
+- Reserved slots cover the service duration **plus the buffers**, so availability and conflict locking use the same rule:
+  - Studio booking: service duration, then the turnaround buffer.
+  - House call: the travel buffer before, the service duration, then the travel buffer after. The turnaround buffer is not added on top.
+- The appointment's `start_at` and `end_at` are the service itself, without buffers. That is what the customer sees.
+- `pending` and `confirmed` bookings block availability. Cancelling a booking deletes its reservations in the same operation as the status change. `completed` and `no_show` bookings keep theirs as a record.
+- House-call bookings must include an address.
+
 ## 4. Service catalog (placeholder)
 
 Seed data lives in `apps/api/seed/services.sql`. **All prices and durations are placeholders to be confirmed by Chao.**
@@ -78,3 +90,5 @@ Open questions:
 4. Public phone or WhatsApp number to show on the site.
 5. Logo, cover photo and the gallery images allowed for use.
 6. Should bookings auto-confirm or wait for manual approval?
+7. Are the turnaround (15 min) and house-call travel (60 min each way) buffers right?
+8. Should add-ons (nail art, removal) be booked on their own or attached to a main service?

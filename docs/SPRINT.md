@@ -41,19 +41,21 @@ A task is complete when:
 - [ ] Confirm whether customers can choose a specific nail technician.
 - [ ] Define staff working hours, breaks, and time-off rules.
 - [ ] Define the cancellation and rescheduling policy.
-- [ ] Confirm the default timezone: `Africa/Nairobi`.
-- [ ] Confirm the default currency and price format.
+- [x] Confirm the default timezone: `Africa/Nairobi`.
+- [x] Confirm the default currency and price format.
 - [ ] Decide the minimum customer contact details required for a booking.
 - [ ] Confirm whether guest booking is the default.
 - [ ] Decide the initial appointment scheduling increment.
 - [ ] Define booking lead time and maximum advance-booking window.
-- [ ] Create the Git repository.
-- [ ] Initialize the pnpm workspace.
-- [ ] Configure Turborepo.
-- [ ] Configure TypeScript.
-- [ ] Configure Biome.
-- [ ] Add the initial README.
-- [ ] Add the architecture and product documentation.
+- [x] Create the Git repository.
+- [x] Initialize the pnpm workspace.
+- [x] Configure Turborepo.
+- [x] Configure TypeScript.
+- [x] Configure Biome.
+- [x] Add the initial README.
+- [x] Add the architecture and product documentation.
+
+> Status: tooling is done. The unticked business decisions have proposed defaults in [BUSINESS_RULES.md](BUSINESS_RULES.md) and are waiting on Chao.
 
 ### Deliverables
 
@@ -77,24 +79,24 @@ A task is complete when:
 
 ### Checklist
 
-- [ ] Create `apps/web`.
-- [ ] Create `apps/api`.
-- [ ] Configure React and Vite.
-- [ ] Configure Hono for Cloudflare Workers.
-- [ ] Configure the D1 binding in Wrangler.
-- [ ] Create the local D1 database configuration.
-- [ ] Add the initial D1 migration.
-- [ ] Select and configure Drizzle with D1 support, or implement a typed native D1 access layer.
-- [ ] Verify that database queries run locally.
-- [ ] Configure environment-variable validation.
-- [ ] Configure frontend-to-API communication.
-- [ ] Add a health-check endpoint.
-- [ ] Add centralized API error handling.
-- [ ] Add request validation using Zod.
-- [ ] Configure CORS for local development.
-- [ ] Add basic API tests.
-- [ ] Add root-level development scripts.
-- [ ] Verify the web application and API can run together.
+- [x] Create `apps/web`.
+- [x] Create `apps/api`.
+- [x] Configure React and Vite.
+- [x] Configure Hono for Cloudflare Workers.
+- [x] Configure the D1 binding in Wrangler.
+- [x] Create the local D1 database configuration.
+- [x] Add the initial D1 migration.
+- [x] Select and configure Drizzle with D1 support, or implement a typed native D1 access layer.
+- [x] Verify that database queries run locally.
+- [x] Configure environment-variable validation.
+- [x] Configure frontend-to-API communication.
+- [x] Add a health-check endpoint.
+- [x] Add centralized API error handling.
+- [x] Add request validation using Zod.
+- [x] Configure CORS for local development.
+- [x] Add basic API tests.
+- [x] Add root-level development scripts.
+- [x] Verify the web application and API can run together.
 
 ### Suggested initial endpoints
 
@@ -125,27 +127,27 @@ A task is complete when:
 
 ### Checklist
 
-- [ ] Define the `services` table.
-- [ ] Define the `staff` table.
-- [ ] Define the `staff_services` relationship.
-- [ ] Define the `staff_working_hours` table.
-- [ ] Define the `staff_time_off` table.
-- [ ] Define the `appointments` table.
-- [ ] Define the slot-reservation or equivalent conflict-prevention table.
-- [ ] Define the `gallery_images` table.
-- [ ] Define any required user and admin identity tables.
-- [ ] Add primary keys, foreign keys, unique constraints, and indexes.
-- [ ] Use integer minor units for monetary values.
-- [ ] Define the appointment status values.
-- [ ] Add service seed data for local development.
-- [ ] Implement service repository functions.
-- [ ] Implement `GET /api/v1/services`.
-- [ ] Implement `GET /api/v1/services/:id`.
-- [ ] Implement service validation.
-- [ ] Build the public service catalog page.
+- [x] Define the `services` table.
+- [x] Define the `staff` table.
+- [x] Define the `staff_services` relationship.
+- [x] Define the `staff_working_hours` table.
+- [x] Define the `staff_time_off` table.
+- [x] Define the `appointments` table.
+- [x] Define the slot-reservation or equivalent conflict-prevention table.
+- [x] Define the `gallery_images` table.
+- [ ] Define any required user and admin identity tables. *Deferred to Sprint 6: the tables depend on the auth library chosen there. `audit_events` is deferred with them.*
+- [x] Add primary keys, foreign keys, unique constraints, and indexes.
+- [x] Use integer minor units for monetary values.
+- [x] Define the appointment status values.
+- [x] Add service seed data for local development.
+- [x] Implement service repository functions.
+- [x] Implement `GET /api/v1/services`.
+- [x] Implement `GET /api/v1/services/:id`.
+- [ ] Implement service validation. *The database CHECKs reject invalid rows. The Zod schemas for service writes come with admin service management in Sprint 6.*
+- [x] Build the public service catalog page.
 - [ ] Add service detail presentation.
-- [ ] Add loading, empty, and error states.
-- [ ] Test service retrieval and validation.
+- [x] Add loading, empty, and error states.
+- [x] Test service retrieval and validation.
 
 ### Deliverables
 
@@ -309,6 +311,7 @@ If D1's supported write operations and constraints do not provide the required g
 ### Checklist
 
 - [ ] Select an authentication solution compatible with Workers and D1.
+- [ ] Add the admin identity and `audit_events` tables required by the chosen solution.
 - [ ] Configure secure sessions or the selected authentication mechanism.
 - [ ] Create the initial administrator account securely.
 - [ ] Ensure public registration cannot grant admin privileges.
