@@ -1,8 +1,9 @@
 @import "tailwindcss";
 
 /*
- * NAILSBYCHAO design tokens. Dark-first (Katiani Styles direction), single accent.
- * Change the brand accent here only: --accent.
+ * NAILSBYCHAO design tokens. Dark-first (Katiani Styles direction).
+ * Light is opt-in via data-theme="light" on the document element.
+ * The light accent must stay dark enough that white text on it passes WCAG AA.
  */
 :root {
   --background: #0b0b0b;
@@ -23,12 +24,13 @@
   --foreground: #1a1a1a;
   --muted: #6b6b6b;
   --border: #ead9de;
-  --accent: #b8607a;
+  --accent: #a14468;
   --accent-foreground: #ffffff;
   --danger: #b91c1c;
   color-scheme: light;
 }
 
+/* inline so utilities keep var(--background) and follow the active theme. */
 @theme inline {
   --color-background: var(--background);
   --color-surface: var(--surface);
@@ -39,20 +41,43 @@
   --color-accent-foreground: var(--accent-foreground);
   --color-danger: var(--danger);
   --radius-card: var(--radius);
+}
+
+@theme {
   --font-sans: "Manrope", ui-sans-serif, system-ui, sans-serif;
   --font-display: "Outfit", ui-sans-serif, system-ui, sans-serif;
 }
 
+/* Horizontal page inset. 1rem, or the device safe area when that is larger. */
+@utility page-x {
+  padding-left: max(1rem, env(safe-area-inset-left));
+  padding-right: max(1rem, env(safe-area-inset-right));
+  @media (width >= 40rem) {
+    padding-left: max(1.5rem, env(safe-area-inset-left));
+    padding-right: max(1.5rem, env(safe-area-inset-right));
+  }
+}
+
+/* Cancels page-x so a scroller can reach the screen edge on a phone. */
+@utility page-x-bleed {
+  @media (width < 40rem) {
+    margin-left: calc(-1 * max(1rem, env(safe-area-inset-left)));
+    margin-right: calc(-1 * max(1rem, env(safe-area-inset-right)));
+    padding-left: max(1rem, env(safe-area-inset-left));
+    padding-right: max(1rem, env(safe-area-inset-right));
+  }
+}
+
 @layer base {
   body {
-    @apply bg-background text-foreground font-sans antialiased;
+    @apply overflow-x-clip bg-background text-foreground font-sans antialiased;
   }
   h1,
   h2,
   h3 {
     @apply font-display;
   }
-  :focus-visible {
-    @apply outline-2 outline-offset-2 outline-accent;
+  :focus-visible:not(.sr-only) {
+    @apply outline-2 outline-offset-2 outline-solid outline-accent;
   }
 }

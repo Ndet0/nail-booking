@@ -11,9 +11,9 @@ This records the Sprint 0 business decisions. Items marked **TBC** are proposed 
 | Instagram | [@nailsbychao_](https://www.instagram.com/nailsbychao_/) | Confirmed |
 | Service model | Home-based studio **and** house calls | Confirmed (Instagram) |
 | Country / timezone | Kenya / `Africa/Nairobi` | Confirmed |
-| Studio area / address | — | **TBC** (show area only publicly; full address after booking) |
-| Phone / WhatsApp | — | **TBC** |
-| Email | — | **TBC** |
+| Studio area / address | Dunamis Apartment, Juja. Public site shows **Juja** only; the apartment name is given after a booking is confirmed. | Confirmed |
+| Phone / WhatsApp | +254 113 563 021 | Confirmed |
+| Email | florakiteria@gmail.com | Confirmed |
 | Logo / cover image | — | **TBC** |
 
 ## 2. Brand direction
@@ -34,7 +34,7 @@ Inspired by [Katiani Styles](https://katiani-styles.swiftill.co.ke/): dark-first
 | House-call area / radius | — | **TBC** |
 | House-call fee | — | **TBC** (flat fee or by zone) |
 | House-call travel buffer | 60 min before and after, blocked in the schedule | **TBC** |
-| Working hours | Mon–Sat 09:00–19:00, Sunday closed | **TBC** |
+| Working hours | Mon–Sat 08:00–20:00, Sunday closed | Confirmed |
 | Breaks | None fixed; added as time off | **TBC** |
 | Scheduling increment | 15 minutes | Proposed |
 | Turnaround buffer between appointments | 15 minutes | **TBC** |
@@ -87,11 +87,10 @@ Open questions:
 
 ## 5. Open questions for Chao
 
-1. Confirm working hours, prices and durations.
+1. Confirm service prices and durations. Working hours are confirmed.
 2. House-call coverage area, fee and minimum spend.
 3. Cancellation / late / no-show policy wording.
-4. Public phone or WhatsApp number to show on the site.
-5. Logo, cover photo and the gallery images allowed for use.
-6. Should bookings auto-confirm or wait for manual approval?
-7. Are the turnaround (15 min) and house-call travel (60 min each way) buffers right?
-8. Should add-ons (nail art, removal) be booked on their own or attached to a main service?
+4. Logo, cover photo and the gallery images allowed for use.
+5. Should bookings auto-confirm or wait for manual approval?
+6. Are the turnaround (15 min) and house-call travel (60 min each way) buffers right?
+7. Should add-ons (nail art, removal) be booked on their own or attached to a main service?

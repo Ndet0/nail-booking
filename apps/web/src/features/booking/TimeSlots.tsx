@@ -17,7 +17,7 @@ export function TimeSlots({ slots, isLoading, error, onRetry, selected, onSelect
   if (isLoading) {
     return (
       <ul
-        className="grid grid-cols-3 gap-2 sm:grid-cols-4"
+        className="grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-4"
         aria-busy="true"
         aria-label="Loading times"
       >
@@ -56,7 +56,7 @@ export function TimeSlots({ slots, isLoading, error, onRetry, selected, onSelect
   }
 
   return (
-    <fieldset className="grid min-w-0 grid-cols-3 gap-2 sm:grid-cols-4">
+    <fieldset className="grid min-w-0 max-w-full grid-cols-2 gap-2 sm:grid-cols-4">
       <legend className="sr-only">Choose a time</legend>
       {slots.map((slot) => {
         const isSelected = slot.startAt === selected;
@@ -67,7 +67,7 @@ export function TimeSlots({ slots, isLoading, error, onRetry, selected, onSelect
             aria-pressed={isSelected}
             onClick={() => onSelect(slot.startAt)}
             className={cn(
-              "h-11 rounded-full border font-semibold tabular-nums",
+              "h-11 min-w-0 rounded-full border px-1 text-sm font-semibold tabular-nums",
               isSelected
                 ? "border-accent bg-accent text-accent-foreground"
                 : "border-border bg-surface hover:border-accent",
