@@ -78,20 +78,20 @@ export function ServiceList() {
 
 function ServiceCard({ service }: { service: ServiceDto }) {
   return (
-    <li className="flex items-start justify-between gap-4 rounded-card border border-border bg-surface p-4 sm:p-5">
+    <li className="flex min-w-0 flex-col gap-3 rounded-card border border-border bg-surface p-4 sm:flex-row sm:items-start sm:justify-between sm:p-5">
       <div className="min-w-0">
         <p className="font-display text-lg font-semibold">{service.name}</p>
         {service.description && <p className="mt-1 text-sm text-muted">{service.description}</p>}
         <p className="mt-2 text-xs text-muted">{formatDuration(service.durationMinutes)}</p>
       </div>
-      <div className="flex shrink-0 flex-col items-end gap-3">
+      <div className="flex items-center justify-between gap-3 sm:shrink-0 sm:flex-col sm:items-end">
         <p className="font-semibold text-accent">
           {formatPrice(service.priceMinor, service.currency)}
         </p>
         <Link
           to={`/book/${encodeURIComponent(service.id)}`}
           aria-label={`Book ${service.name}`}
-          className="rounded-full border border-accent px-4 py-1.5 text-sm font-semibold text-accent hover:bg-accent hover:text-accent-foreground"
+          className="inline-flex min-h-11 items-center rounded-full border border-accent px-4 text-sm font-semibold text-accent hover:bg-accent hover:text-accent-foreground"
         >
           Book
         </Link>

@@ -10,7 +10,7 @@ type Props = {
 export function DayStrip({ dates, selected, onSelect }: Props) {
   return (
     // min-w-0: fieldsets default to min-content width, which would stop the strip scrolling.
-    <fieldset className="-mx-4 flex min-w-0 snap-x gap-2 overflow-x-auto px-4 pb-2 sm:mx-0 sm:px-0">
+    <fieldset className="page-x-bleed flex min-w-0 max-w-full snap-x gap-2 overflow-x-auto pb-2">
       <legend className="sr-only">Choose a day</legend>
       {dates.map((date) => {
         const { weekday, day, month } = dayParts(date);

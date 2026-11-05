@@ -1,6 +1,7 @@
 import type { AppointmentLocation, ServiceDto } from "@nailsbychao/types";
 import { useState } from "react";
 import { Link, useParams } from "react-router";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { useAvailability } from "@/features/booking/api";
 import { DayStrip } from "@/features/booking/DayStrip";
 import { LocationToggle } from "@/features/booking/LocationToggle";
@@ -18,10 +19,16 @@ export function BookingPage() {
   const service = useService(serviceId);
 
   return (
-    <div className="mx-auto w-full max-w-2xl px-4 py-8 sm:px-6">
-      <Link to="/" className="text-sm text-muted hover:text-accent">
-        ← All services
-      </Link>
+    <div className="page-x mx-auto w-full min-w-0 max-w-2xl py-8">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <Link
+          to="/"
+          className="inline-flex min-h-11 min-w-0 items-center text-sm text-muted hover:text-accent"
+        >
+          ← All services
+        </Link>
+        <ThemeToggle />
+      </div>
 
       {service.isPending ? (
         <div className="mt-6 h-28 animate-pulse rounded-card border border-border bg-surface" />
@@ -40,9 +47,9 @@ export function BookingPage() {
 function ServiceHeader({ service }: { service: ServiceDto }) {
   return (
     <header className="mt-6 rounded-card border border-border bg-surface p-5">
-      <div className="flex items-start justify-between gap-4">
-        <h1 className="text-2xl font-semibold">{service.name}</h1>
-        <p className="shrink-0 font-semibold text-accent">
+      <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+        <h1 className="min-w-0 text-2xl font-semibold">{service.name}</h1>
+        <p className="font-semibold text-accent sm:shrink-0">
           {formatPrice(service.priceMinor, service.currency)}
         </p>
       </div>
@@ -96,10 +103,10 @@ function SlotPicker({ serviceId }: { serviceId: string }) {
   }
 
   return (
-    <div className="mt-8 grid gap-8">
+    <div className="mt-8 grid min-w-0 grid-cols-[minmax(0,1fr)] gap-8">
       <LocationToggle value={location} onChange={chooseLocation} />
 
-      <section aria-labelledby="day-heading">
+      <section aria-labelledby="day-heading" className="min-w-0">
         <h2
           id="day-heading"
           className="mb-3 text-sm font-semibold uppercase tracking-widest text-muted"
@@ -109,7 +116,7 @@ function SlotPicker({ serviceId }: { serviceId: string }) {
         <DayStrip dates={datesBetween(today, lastDate)} selected={date} onSelect={chooseDate} />
       </section>
 
-      <section aria-labelledby="time-heading">
+      <section aria-labelledby="time-heading" className="min-w-0">
         <h2
           id="time-heading"
           className="mb-3 text-sm font-semibold uppercase tracking-widest text-muted"
@@ -129,9 +136,9 @@ function SlotPicker({ serviceId }: { serviceId: string }) {
       {startAt && (
         <div
           aria-live="polite"
-          className="sticky bottom-4 flex flex-wrap items-center justify-between gap-3 rounded-card border border-accent/60 bg-surface p-4"
+          className="sticky bottom-[max(1rem,env(safe-area-inset-bottom))] flex flex-col gap-3 rounded-card border border-accent/60 bg-surface p-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between"
         >
-          <p className="font-semibold">
+          <p className="min-w-0 font-semibold">
             {formatDay(date)}, {formatTime(startAt)}{" "}
             <span className="font-normal text-muted">
               {location === "house_call" ? "· house call" : "· at the studio"}
@@ -140,7 +147,7 @@ function SlotPicker({ serviceId }: { serviceId: string }) {
           <button
             type="button"
             disabled
-            className="rounded-full bg-accent px-5 py-2 font-semibold text-accent-foreground opacity-60"
+            className="inline-flex min-h-11 w-full items-center justify-center rounded-full bg-accent px-5 font-semibold text-accent-foreground opacity-60 sm:w-auto"
           >
             Continue (coming soon)
           </button>

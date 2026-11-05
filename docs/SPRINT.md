@@ -39,7 +39,7 @@ A task is complete when:
 - [ ] Confirm the initial service catalog.
 - [ ] Record service prices and durations.
 - [ ] Confirm whether customers can choose a specific nail technician.
-- [ ] Define staff working hours, breaks, and time-off rules.
+- [x] Define staff working hours, breaks, and time-off rules. *Mon–Sat 08:00–20:00, Sunday closed. No fixed breaks; time off covers closures.*
 - [ ] Define the cancellation and rescheduling policy.
 - [x] Confirm the default timezone: `Africa/Nairobi`.
 - [x] Confirm the default currency and price format.
@@ -55,7 +55,7 @@ A task is complete when:
 - [x] Add the initial README.
 - [x] Add the architecture and product documentation.
 
-> Status: tooling is done. The unticked business decisions have proposed defaults in [BUSINESS_RULES.md](BUSINESS_RULES.md) and are waiting on Chao.
+> Status: tooling is done. Phone, email, the public area (Juja), and Mon–Sat 08:00–20:00 are confirmed. The apartment name stays off the public site. The accent colour and the other unticked business decisions still have proposed defaults in [BUSINESS_RULES.md](BUSINESS_RULES.md).
 
 ### Deliverables
 
@@ -182,7 +182,7 @@ A task is complete when:
 - [ ] Configure Cloudflare R2 for image storage, if included in this sprint.
 - [ ] Validate image file types and upload sizes.
 - [ ] Configure safe image delivery.
-- [ ] Add contact and opening-hours information.
+- [x] Add contact and opening-hours information. *Public site shows Juja, hours, phone, WhatsApp, and email. The apartment name stays private.*
 - [ ] Add the cancellation policy and relevant booking guidance.
 - [ ] Ensure the interface is mobile-responsive.
 - [ ] Add accessible navigation and focus states.
