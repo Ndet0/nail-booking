@@ -3,6 +3,7 @@ import { cors } from "hono/cors";
 import { requestId } from "hono/request-id";
 import { type AppEnv, getConfig } from "./env";
 import { notFound, onError } from "./middleware/error-handler";
+import { availabilityRoutes } from "./modules/availability/availability.routes";
 import { servicesRoutes } from "./modules/services/services.routes";
 import { healthRoutes } from "./routes/health";
 
@@ -20,6 +21,7 @@ app.use(
 
 app.route("/health", healthRoutes);
 app.route("/services", servicesRoutes);
+app.route("/availability", availabilityRoutes);
 
 app.notFound(notFound);
 app.onError(onError);
