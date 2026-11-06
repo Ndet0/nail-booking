@@ -1,4 +1,4 @@
-import { and, eq, gt, gte, lt } from "drizzle-orm";
+import { and, eq, gt, gte, lt, ne } from "drizzle-orm";
 import type { Db } from "../../db/client";
 import {
   appointmentSlotReservations,
@@ -58,6 +58,7 @@ export async function getReservedSlots(
   staffId: string,
   from: Date,
   to: Date,
+  excludeAppointmentId?: string,
 ): Promise<Set<string>> {
   const rows = await db
     .select({ slotStartAt: appointmentSlotReservations.slotStartAt })
@@ -67,6 +68,9 @@ export async function getReservedSlots(
         eq(appointmentSlotReservations.staffId, staffId),
         gte(appointmentSlotReservations.slotStartAt, from.toISOString()),
         lt(appointmentSlotReservations.slotStartAt, to.toISOString()),
+        excludeAppointmentId
+          ? ne(appointmentSlotReservations.appointmentId, excludeAppointmentId)
+          : undefined,
       ),
     );
   return new Set(rows.map((row) => row.slotStartAt));

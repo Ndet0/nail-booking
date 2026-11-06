@@ -237,7 +237,7 @@ function samePayload(row: AppointmentRow, input: NewBooking): boolean {
   );
 }
 
-function toBookingDto(row: AppointmentRow, managementToken: string | null): BookingDto {
+export function toBookingDto(row: AppointmentRow, managementToken: string | null): BookingDto {
   return {
     id: row.id,
     bookingReference: row.bookingReference,
@@ -257,6 +257,7 @@ function toBookingDto(row: AppointmentRow, managementToken: string | null): Book
     customerEmail: row.customerEmail,
     customerNotes: row.customerNotes,
     travelFeeMinor: row.travelFeeMinor,
+    rescheduledAt: row.rescheduledAt,
   };
 }
 
@@ -286,13 +287,13 @@ function newManagementToken(): string {
   return [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
-async function sha256Hex(value: string): Promise<string> {
+export async function sha256Hex(value: string): Promise<string> {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
   return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 /** Columns named by SQLite's `UNIQUE constraint failed:` message, or null when it isn't one. */
-function uniqueConstraintTarget(error: unknown): string | null {
+export function uniqueConstraintTarget(error: unknown): string | null {
   const parts: string[] = [];
   let current: unknown = error;
   for (let depth = 0; depth < 5 && current; depth++) {

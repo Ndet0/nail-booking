@@ -48,6 +48,12 @@ export function AdminBookingPage() {
             <Detail label="Address" value={booking.address ?? "—"} />
             <Detail label="Staff" value={booking.staffName} />
             <Detail label="Notes" value={booking.customerNotes ?? "—"} />
+            {booking.rescheduledAt ? (
+              <Detail
+                label="Moved by customer"
+                value={`${formatDay(studioDateOf(booking.rescheduledAt))}, ${formatTime(booking.rescheduledAt)}`}
+              />
+            ) : null}
           </dl>
           {NEXT_STATUS[booking.status].length > 0 ? (
             <div className="flex flex-wrap gap-2">

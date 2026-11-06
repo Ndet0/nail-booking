@@ -26,19 +26,18 @@ The system will be designed for local development first and deployment to Cloudf
 | Monorepo | pnpm workspaces + Turborepo | Manage applications and shared packages |
 | Language | TypeScript | Frontend and backend development |
 | Frontend | React + Vite | Customer and admin interfaces |
-| Styling | Tailwind CSS | Responsive styling |
-| UI components | shadcn/ui | Accessible, reusable interface components |
+| Styling | Tailwind CSS | Responsive styling. Screens are custom components. `apps/web/components.json` is present, and no shadcn/ui components are installed |
 | Routing | React Router | Frontend navigation |
 | Server state | TanStack Query | API fetching, caching, and mutations |
 | API | Hono | HTTP routes and middleware |
 | Runtime and hosting | Cloudflare Workers | Run the backend API |
 | Database | Cloudflare D1 | Relational data storage using SQLite |
-| Database access | Drizzle ORM + D1 adapter, or native D1 SQL | Typed queries and migrations |
+| Database access | Drizzle ORM + D1 adapter | Typed queries and migrations |
 | Validation | Zod | Validate request payloads and environment configuration |
-| Image storage | Cloudflare R2 | Store service and gallery images |
+| Image storage | Cloudflare R2 | Gallery images. `services.image_key` is unused |
 | Deployment configuration | Wrangler | Local development, migrations, and Cloudflare deployment |
 | Testing | Vitest | Unit and integration tests |
-| Browser testing | Playwright | End-to-end booking flows |
+| Browser testing | Playwright (planned) | End-to-end booking flows. Not installed. Sprint 8 |
 | Code quality | Biome | Formatting and linting |
 | Package management | pnpm | Dependency installation and workspace management |
 
@@ -46,7 +45,7 @@ The system will be designed for local development first and deployment to Cloudf
 
 Use **Cloudflare D1** as the production database, rather than PostgreSQL, so local development and deployment target the same database technology.
 
-Use Drizzle with its supported D1 integration or native D1 prepared statements. Do not make the application dependent on PostgreSQL-specific features.
+Drizzle is the database access layer, through its D1 integration. Do not make the application dependent on PostgreSQL-specific features.
 
 The database access layer must be designed around D1's actual SQLite behavior and transaction capabilities. Do not assume that every ORM transaction feature works identically on D1.
 
@@ -96,19 +95,18 @@ The browser must never connect directly to D1 or receive privileged Cloudflare c
 nail-booking/
 ├── apps/
 │   ├── web/
-│   │   ├── public/
 │   │   ├── src/
-│   │   │   ├── app/
+│   │   │   ├── app/           # router, query client
 │   │   │   ├── components/
 │   │   │   ├── features/
 │   │   │   │   ├── services/
 │   │   │   │   ├── gallery/
 │   │   │   │   ├── booking/
 │   │   │   │   └── admin/
-│   │   │   ├── hooks/
 │   │   │   ├── lib/
 │   │   │   ├── routes/
 │   │   │   └── styles/
+│   │   ├── components.json    # shadcn config only; no components installed
 │   │   └── package.json
 │   │
 │   └── api/
@@ -118,31 +116,27 @@ nail-booking/
 │       │   ├── env.ts
 │       │   ├── config/        # studio scheduling rules (studio.ts)
 │       │   ├── middleware/
-│       │   ├── routes/
+│       │   ├── routes/        # health
 │       │   ├── modules/
 │       │   │   ├── auth/
 │       │   │   ├── services/
-│       │   │   ├── staff/
 │       │   │   ├── availability/
 │       │   │   ├── bookings/
 │       │   │   ├── gallery/
-│       │   │   └── admin/
+│       │   │   └── admin/     # bookings, services, staff, hours, time off, gallery
 │       │   ├── db/
 │       │   │   ├── schema.ts
-│       │   │   ├── client.ts
-│       │   │   └── repositories/
+│       │   │   └── client.ts
 │       │   └── utils/
 │       ├── migrations/
-│       ├── seed/          # local development data
+│       ├── seed/              # local development data
+│       ├── scripts/
 │       ├── test/
 │       ├── wrangler.jsonc
 │       └── package.json
 │
 ├── packages/
-│   ├── types/
-│   ├── validation/
-│   ├── config/
-│   └── ui/
+│   └── types/                 # shared API contracts
 │
 ├── docs/
 │   ├── TECHNICAL_ARCHITECTURE.md
@@ -163,14 +157,30 @@ nail-booking/
 
 - `apps/web` contains the frontend.
 - `apps/api` contains the Hono API and Cloudflare Worker configuration.
-- `packages/types` contains shared TypeScript types that do not expose database internals.
-- `packages/validation` contains reusable Zod schemas where sharing is appropriate.
-- `packages/config` contains shared development configuration.
-- `packages/ui` contains reusable UI components if they need to be shared across applications.
-- Database queries belong in the API's database/repository layer.
+- `packages/types` is the only shared package. It holds API contracts and does not expose database internals.
+- Each module keeps its repository next to its routes (`*.repository.ts`). There is no `db/repositories` directory and no `modules/staff` directory. Staff, hours, and time off live under `modules/admin`.
 - Business rules must not be implemented exclusively inside React components.
 
 Do not create empty packages just for the sake of the structure. Add them when there is a real need.
+
+### Frontend routes
+
+Defined in `apps/web/src/app/router.tsx`.
+
+| Path | Screen |
+|---|---|
+| `/` | Home: hero, service catalog, gallery section, visit details |
+| `/book/:serviceId` | Booking: location, month calendar, times, details, review, then confirmation |
+| `/manage` | Look up a booking |
+| `/manage/:reference` | Manage a booking. The token arrives as `#token` |
+| `/admin/login` | Administrator sign-in |
+| `/admin` | Upcoming bookings |
+| `/admin/bookings/:id` | Booking detail and status changes |
+| `/admin/services` | Service catalog management |
+| `/admin/staff` | Staff, service assignments, hours, and time off |
+| `/admin/gallery` | Gallery uploads and publication |
+
+Booking on `/book/:serviceId` is three steps: where and when (studio or house call, `DateCalendar`, time slots), contact details, then review. The confirmation screen appears after the booking is saved. The management token is returned once and kept in `sessionStorage` for that browser tab, and in the `#token` on `/manage/:reference`. Customers do not choose a technician. The API assigns an eligible active staff member.
 
 ---
 
@@ -183,7 +193,7 @@ The Hono API will run as a Cloudflare Worker.
 The Worker will receive configured bindings through its environment, including:
 
 - `DB`: D1 database binding.
-- `BUCKET`: R2 bucket binding, when image storage is implemented.
+- `BUCKET`: R2 bucket binding for gallery images.
 - Authentication secrets and other private environment variables.
 - Optional notification-provider configuration.
 
@@ -207,12 +217,7 @@ Use version-controlled SQL migrations. Do not rely on manually editing a product
 
 ### Cloudflare R2
 
-R2 will store uploaded images, including:
-
-- Service images.
-- Nail design gallery images.
-- Studio photographs.
-- Other approved public media.
+R2 stores gallery images. The `services.image_key` column exists and is unused: the public service DTO has no image field, and admin service writes do not accept one. Studio photographs, when published, go through the gallery.
 
 Store object keys and related metadata in D1, not image binary data.
 
@@ -266,7 +271,7 @@ Suggested fields:
 - `duration_minutes`
 - `price_minor`
 - `currency`
-- `image_key` (R2 object key, optional)
+- `image_key` (optional R2 object key). Present on the table and unused by the API and the admin UI
 - `is_active`
 - `display_order`
 - `created_at`
@@ -355,6 +360,7 @@ Suggested fields:
 - `address` (required when `location` is `house_call`)
 - `travel_fee_minor`
 - `customer_notes`
+- `rescheduled_at`: set when the customer moves the appointment. One move is allowed. Null until then.
 - `created_at`
 - `updated_at`
 
@@ -458,7 +464,7 @@ The API should:
 5. Atomically reserve the required scheduling increments or use the selected concurrency-control mechanism.
 6. Create the appointment and its reservations as one logical operation.
 7. Return a booking reference and booking details.
-8. Trigger confirmation delivery after the booking has been committed.
+8. Return the confirmation after the booking has been committed. The MVP shows that confirmation on screen. Email and SMS are Sprint 9 and must not run until this commit has succeeded.
 
 If a slot is no longer available, return a clear conflict response and ask the customer to select another slot.
 
@@ -492,17 +498,19 @@ Use a versioned REST API under `/api/v1`.
 
 | Method | Endpoint | Purpose |
 |---|---|---|
-| GET | `/api/v1/services` | List active services |
+| GET | `/api/v1/health` | API and D1 health. `200` when the database answers, `503` when it does not |
+| GET | `/api/v1/services` | List active services. Optional `category`: `nails` or `makeup` |
 | GET | `/api/v1/services/:id` | Get service details |
-| GET | `/api/v1/staff` | List bookable staff |
-| GET | `/api/v1/gallery` | List published gallery images |
+| GET | `/api/v1/gallery` | List published gallery images. `limit` (default 50, max 100) and an opaque `cursor` |
 | GET | `/api/v1/gallery/:id/image` | Image bytes for a published gallery image |
 | GET | `/api/v1/availability` | Find available slots |
 | POST | `/api/v1/bookings` | Create a booking |
-| GET | `/api/v1/bookings/:reference` | Retrieve a booking using an authorized lookup mechanism |
-| POST | `/api/v1/bookings/:reference/cancel` | Request booking cancellation |
+| GET | `/api/v1/bookings/:reference` | Retrieve a booking. Requires `X-Booking-Token` |
+| GET | `/api/v1/bookings/:reference/availability` | Times this booking can move to. Requires `X-Booking-Token` |
+| POST | `/api/v1/bookings/:reference/cancel` | Cancel a booking. Requires `X-Booking-Token` |
+| POST | `/api/v1/bookings/:reference/reschedule` | Move a booking once. Requires `X-Booking-Token` |
 
-The booking lookup must not expose private appointment details based only on a predictable ID. Use an unguessable reference plus an appropriate verification mechanism, such as a secure management token or verified customer identity.
+The booking lookup does not accept the reference alone. The client sends the management token in `X-Booking-Token`. The API compares its SHA-256 with the stored hash. An unknown reference, a missing token, and a wrong token all return the same `401 unauthenticated` body, so existence is not revealed. Lookup responses set `managementToken` to null.
 
 #### `GET /api/v1/availability`
 
@@ -544,11 +552,12 @@ Header: `Idempotency-Key`, required. 16–128 letters, numbers, hyphens, or unde
   "location": "studio",
   "customerName": "Amina",
   "customerPhone": "0712 345 678",
-  "customerEmail": "amina@example.com"
+  "customerEmail": "amina@example.com",
+  "customerNotes": "Short almond shape"
 }
 ```
 
-A house call also sends `address`. A studio booking ignores `address`. The response never includes the studio's apartment name.
+`customerEmail` is optional. `customerNotes` is optional and limited to 500 characters. A house call also sends `address`. A studio booking ignores `address`. The response never includes the studio's apartment name. There is no public staff list. The server assigns an eligible active staff member.
 
 `startAt` is the service start: a canonical UTC instant on a 15-minute boundary, without buffers. The server rechecks that this start is still offered, assigns an eligible staff member, and stores snapshots of the service name, duration, and price. New bookings are `pending`. `travelFeeMinor` stays null until a house-call fee is set.
 
@@ -561,6 +570,28 @@ A house call also sends `address`. A studio booking ignores `address`. The respo
 - `409 idempotency_conflict` when the key was already used for different details.
 
 Implementation: `apps/api/src/modules/bookings/`. Reservation rows come from `reservationSlots`.
+
+#### Customer booking management
+
+Header on every route below: `X-Booking-Token`, the raw token from the create response.
+
+`GET /api/v1/bookings/:reference` returns the booking, including `rescheduledAt`.
+
+`GET /api/v1/bookings/:reference/availability?date=` returns slots for this booking's staff member, snapshot duration, and location. The booking's own reservation rows are ignored, the current start is omitted, and the earliest start is 24 hours out. Public availability stays on the 2-hour lead. `409` when the booking can no longer be moved.
+
+`POST /api/v1/bookings/:reference/cancel` has no body. It is allowed for `pending` or `confirmed` until 24 hours before the start. The batch sets `cancelled` and deletes that booking's reservation rows. A refused cancel does not delete slots.
+
+`POST /api/v1/bookings/:reference/reschedule` body is `{ "startAt" }`. It is allowed once, while the current start is at least 24 hours away. The new start must also be at least 24 hours away, inside the booking window, and still offered for that staff member. Service, staff, location, and address do not change.
+
+The reschedule batch updates `start_at`, `end_at`, and `rescheduled_at` only while `rescheduled_at` is still null, then deletes this booking's slots and inserts the new ones only if that update stuck. The delete runs before the insert, so a move onto an overlapping neighbouring time does not collide with itself. A primary-key conflict with another booking rolls the whole batch back and leaves the original time in place.
+
+- `400 validation_error` for a bad body or date, including a request to keep the current time.
+- `400 date_out_of_range` when the new Nairobi date is outside the booking window.
+- `401 unauthenticated` for a bad or missing manage link.
+- `409 change_window_closed` inside the 24-hour window, or when the new time is inside it.
+- `409 already_rescheduled` when the booking was already moved.
+- `409 booking_not_changeable` for `cancelled`, `completed`, `no_show`, or a booking that changed between the read and the write.
+- `409 slot_taken` when the new time is not offered or was just reserved.
 
 ### Admin endpoints
 
@@ -581,7 +612,7 @@ Every route below requires a session and an `admins` row. Missing or expired ses
 | PUT | `/api/v1/admin/staff/:id/services` | Replace service assignments |
 | GET | `/api/v1/admin/staff/:id/hours` | List weekly hours |
 | PUT | `/api/v1/admin/staff/:id/hours` | Replace weekly hours. Overlapping intervals on one weekday are rejected |
-| GET | `/api/v1/admin/time-off` | List time off |
+| GET | `/api/v1/admin/time-off` | List time off. Filters: `staffId`, `from`, `to`, plus `limit` and `cursor` |
 | POST | `/api/v1/admin/time-off` | Add time off. Dates and times are Nairobi local |
 | DELETE | `/api/v1/admin/time-off/:id` | Remove time off |
 | GET | `/api/v1/admin/gallery` | List gallery images, including unpublished |
@@ -598,7 +629,7 @@ Status changes:
 - `confirmed` → `completed`, `no_show`, or `cancelled`
 - `cancelled`, `completed`, and `no_show` are terminal
 
-Anything else is `409 invalid_status_transition`. Cancellation deletes that appointment's slot reservations in the same batch. Other transitions leave the reservations in place. Rescheduling is not implemented.
+Anything else is `409 invalid_status_transition`. Cancellation deletes that appointment's slot reservations in the same batch. Other transitions leave the reservations in place. Customer rescheduling is a separate route and is not one of these status changes. The 24-hour customer window does not apply here.
 
 ### API conventions
 
@@ -690,18 +721,17 @@ Use a D1-compatible local or test environment. A passing mock-only test is not e
 
 ### End-to-end tests
 
-Use Playwright to test:
+Playwright is the planned browser tool. It is not installed, and these flows are not automated yet (Sprint 8). When it is added, cover:
 
 1. Browse services.
 2. Select a service.
-3. Select a staff member, where applicable.
-4. Choose a date and available time.
-5. Enter customer details.
-6. Submit the booking.
-7. Receive a booking reference.
-8. View or cancel a booking using the intended verification flow.
-9. Log in as an administrator.
-10. Manage bookings, services, staff, and schedules.
+3. Choose studio or house call, a date, and an available time.
+4. Enter customer details and review them.
+5. Submit the booking.
+6. Receive a booking reference.
+7. View, reschedule, or cancel a booking using the management token.
+8. Log in as an administrator.
+9. Manage bookings, services, staff, and schedules.
 
 ---
 
@@ -724,7 +754,7 @@ The local environment should exercise the same D1-oriented data model used in pr
 ### Deployment
 
 1. Create the Cloudflare D1 database.
-2. Create the R2 bucket when image storage is implemented.
+2. Create the production R2 bucket for gallery images.
 3. Configure Worker bindings and environment variables.
 4. Add required secrets through Cloudflare's secret-management mechanism.
 5. Apply production D1 migrations.

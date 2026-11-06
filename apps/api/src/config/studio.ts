@@ -9,6 +9,8 @@ export const STUDIO = {
   turnaroundBufferMinutes: 15,
   houseCallTravelBufferMinutes: 60,
   minLeadTimeMinutes: 2 * 60,
+  /** Customers may cancel or reschedule only until this long before the appointment. */
+  customerChangeCutoffMinutes: 24 * 60,
   maxAdvanceDays: 60,
   /** Unset until Chao confirms the house-call fee (flat or by zone). */
   houseCallFeeMinor: null as number | null,

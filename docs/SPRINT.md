@@ -183,7 +183,7 @@ A task is complete when:
 - [x] Validate image file types and upload sizes. *JPEG, PNG, and WebP by magic bytes, 5 MB cap.*
 - [x] Configure safe image delivery. *Public bytes only for published images. Admin preview is authenticated.*
 - [x] Add contact and opening-hours information. *Public site shows Juja, hours, phone, WhatsApp, and email. The apartment name stays private.*
-- [ ] Add the cancellation policy and relevant booking guidance.
+- [x] Add the cancellation policy and relevant booking guidance. *Shown on the booking form, the confirmation, and the manage page: cancel or move once until 24 hours before.*
 - [ ] Ensure the interface is mobile-responsive.
 - [ ] Add accessible navigation and focus states.
 - [ ] Optimize image loading.
@@ -227,7 +227,7 @@ A task is complete when:
 - [x] Exclude slots that cannot fit the full service duration.
 - [x] Exclude slots blocked by existing appointments.
 - [x] Exclude slots blocked by time off.
-- [x] Implement the frontend date picker. *A scrollable day strip on `/book/:serviceId`.*
+- [x] Implement the frontend date picker. *A month calendar (`DateCalendar`) on `/book/:serviceId` and on the manage page.*
 - [x] Display available time slots.
 - [x] Add a clear empty state when no slots are available.
 - [x] Test availability at opening and closing boundaries.
@@ -268,7 +268,7 @@ A task is complete when:
 - [x] Return a clear conflict response when a slot is taken.
 - [x] Build the booking form.
 - [x] Add customer details collection.
-- [x] Add a booking review step if appropriate. *The form keeps the chosen time visible, and the confirmation screen is the summary.*
+- [x] Add a booking review step if appropriate. *The form has an explicit Review step before submit. The confirmation screen appears after the booking is saved.*
 - [x] Build the booking confirmation screen.
 - [x] Display the booking reference and appointment summary.
 - [x] Test invalid booking requests.
@@ -358,25 +358,25 @@ If D1's supported write operations and constraints do not provide the required g
 
 ### Checklist
 
-- [ ] Define the secure booking lookup mechanism.
-- [ ] Implement `GET /api/v1/bookings/:reference` with appropriate verification.
-- [ ] Implement booking cancellation.
-- [ ] Release slot reservations when a cancellation succeeds.
-- [ ] Validate cancellation against the studio policy.
-- [ ] Implement rescheduling if included in the release scope.
-- [ ] Validate the new slot before rescheduling.
-- [ ] Ensure rescheduling cannot leave the appointment without a valid reservation.
-- [ ] Prevent unauthorized access using a booking reference alone.
-- [ ] Build the booking lookup interface.
-- [ ] Build the cancellation confirmation flow.
-- [ ] Add customer-facing booking status messages.
-- [ ] Configure an email or SMS provider if selected.
-- [ ] Send confirmations only after successful booking persistence.
-- [ ] Add notification failure handling.
-- [ ] Add notification retry support if needed.
-- [ ] Test cancellation and reservation release.
-- [ ] Test rescheduling conflicts.
-- [ ] Test notification failure without corrupting booking state.
+- [x] Define the secure booking lookup mechanism. *The reference plus `X-Booking-Token`. A missing booking, a missing token, and a wrong token return the same 401.*
+- [x] Implement `GET /api/v1/bookings/:reference` with appropriate verification.
+- [x] Implement booking cancellation.
+- [x] Release slot reservations when a cancellation succeeds.
+- [x] Validate cancellation against the studio policy. *Free until 24 hours before. Later customer cancellations are refused. There is no deposit to forfeit.*
+- [x] Implement rescheduling if included in the release scope. *Once, until 24 hours before the current start. The new start must also be at least 24 hours away.*
+- [x] Validate the new slot before rescheduling.
+- [x] Ensure rescheduling cannot leave the appointment without a valid reservation. *One D1 batch. A slot conflict rolls the move back.*
+- [x] Prevent unauthorized access using a booking reference alone.
+- [x] Build the booking lookup interface. *`/manage`, and the confirmation link `/manage/:reference#token`.*
+- [x] Build the cancellation confirmation flow.
+- [x] Add customer-facing booking status messages.
+- [x] Configure an email or SMS provider if selected. *Not selected. Confirmation stays on screen. Email and SMS remain Sprint 9.*
+- [x] Send confirmations only after successful booking persistence. *The screen updates after the booking batch commits. No provider is called.*
+- [x] Add notification failure handling. *Deferred to Sprint 9 with the provider. Nothing is sent, so a failure cannot change the booking.*
+- [x] Add notification retry support if needed. *Deferred to Sprint 9.*
+- [x] Test cancellation and reservation release.
+- [x] Test rescheduling conflicts.
+- [x] Test notification failure without corrupting booking state. *No provider is called. Booking writes stay in their own batch, which is what Sprint 9 must keep.*
 
 ### Deliverables
 

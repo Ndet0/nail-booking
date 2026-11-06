@@ -5,19 +5,27 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { useAvailability } from "@/features/booking/api";
 import { BookingConfirmation } from "@/features/booking/BookingConfirmation";
 import { type BookingDetails, BookingForm } from "@/features/booking/BookingForm";
-import { DayStrip } from "@/features/booking/DayStrip";
+import { DateCalendar } from "@/features/booking/DateCalendar";
 import { LocationToggle } from "@/features/booking/LocationToggle";
 import { loadBooking, saveBooking } from "@/features/booking/saved-booking";
 import { TimeSlots } from "@/features/booking/TimeSlots";
 import { useService } from "@/features/services/api";
 import { ApiError } from "@/lib/api";
-import { addDays, datesBetween, studioToday } from "@/lib/datetime";
+import { addDays, studioToday } from "@/lib/datetime";
 import { formatDuration, formatPrice } from "@/lib/format";
 
-/** Strip length until the API reports the real booking window. */
-const INITIAL_STRIP_DAYS = 14;
+/** Window length until the API reports the real booking window. */
+const INITIAL_WINDOW_DAYS = 14;
 
 const EMPTY_DETAILS: BookingDetails = { name: "", phone: "", email: "", address: "", notes: "" };
+
+type BookingStep = 1 | 2 | 3;
+
+const STEP_TITLES: Record<BookingStep, string> = {
+  1: "Where and when",
+  2: "Your details",
+  3: "Review",
+};
 
 const BOOKING_PARAM = "booking";
 
@@ -113,20 +121,27 @@ function SlotPicker({
   onBooked: (booking: BookingDto) => void;
 }) {
   const [today] = useState(studioToday);
+  const [step, setStep] = useState<BookingStep>(1);
   const [location, setLocation] = useState<AppointmentLocation>("studio");
   const [date, setDate] = useState(today);
   const [startAt, setStartAt] = useState<string | null>(null);
   const [slotTaken, setSlotTaken] = useState(false);
   const [details, setDetails] = useState(EMPTY_DETAILS);
+  const progressRef = useRef<HTMLParagraphElement>(null);
   const timeRef = useRef<HTMLElement>(null);
   const availability = useAvailability(service.id, date, location);
 
-  const lastDate = availability.data?.lastBookableDate ?? addDays(today, INITIAL_STRIP_DAYS - 1);
+  const lastDate = availability.data?.lastBookableDate ?? addDays(today, INITIAL_WINDOW_DAYS - 1);
   const isLoadingSlots = availability.isPending || availability.isPlaceholderData;
 
   useEffect(() => {
     if (slotTaken) timeRef.current?.scrollIntoView({ block: "nearest" });
   }, [slotTaken]);
+
+  useEffect(() => {
+    if (step === 1) return;
+    progressRef.current?.scrollIntoView({ block: "nearest" });
+  }, [step]);
 
   function chooseLocation(next: AppointmentLocation) {
     setLocation(next);
@@ -148,54 +163,82 @@ function SlotPicker({
   function handleSlotTaken() {
     setStartAt(null);
     setSlotTaken(true);
+    setStep(1);
   }
 
   return (
     <div className="mt-8 grid min-w-0 grid-cols-[minmax(0,1fr)] gap-8">
-      <LocationToggle value={location} onChange={chooseLocation} />
+      <p ref={progressRef} className="text-sm font-semibold uppercase tracking-widest text-muted">
+        Step {step} of 3
+        <span className="font-normal normal-case tracking-normal"> · {STEP_TITLES[step]}</span>
+      </p>
 
-      <section aria-labelledby="day-heading" className="min-w-0">
-        <h2
-          id="day-heading"
-          className="mb-3 text-sm font-semibold uppercase tracking-widest text-muted"
-        >
-          Day
-        </h2>
-        <DayStrip dates={datesBetween(today, lastDate)} selected={date} onSelect={chooseDate} />
-      </section>
+      {step === 1 && (
+        <>
+          <LocationToggle value={location} onChange={chooseLocation} />
 
-      <section ref={timeRef} aria-labelledby="time-heading" className="min-w-0">
-        <h2
-          id="time-heading"
-          className="mb-3 text-sm font-semibold uppercase tracking-widest text-muted"
-        >
-          Time <span className="font-normal normal-case tracking-normal">(Nairobi time)</span>
-        </h2>
-        {slotTaken && (
-          <p role="alert" className="mb-3 text-sm text-danger">
-            That time was just taken. Please choose another.
-          </p>
-        )}
-        <TimeSlots
-          slots={availability.data?.slots}
-          isLoading={isLoadingSlots}
-          error={availability.isError ? availability.error : null}
-          onRetry={() => availability.refetch()}
-          selected={startAt}
-          onSelect={chooseTime}
-        />
-      </section>
+          <section aria-labelledby="day-heading" className="min-w-0">
+            <h2
+              id="day-heading"
+              className="mb-3 text-sm font-semibold uppercase tracking-widest text-muted"
+            >
+              Day
+            </h2>
+            <DateCalendar
+              firstDate={today}
+              lastDate={lastDate}
+              selected={date}
+              onSelect={chooseDate}
+            />
+          </section>
+
+          <section ref={timeRef} aria-labelledby="time-heading" className="min-w-0">
+            <h2
+              id="time-heading"
+              className="mb-3 text-sm font-semibold uppercase tracking-widest text-muted"
+            >
+              Time <span className="font-normal normal-case tracking-normal">(Nairobi time)</span>
+            </h2>
+            {slotTaken && (
+              <p role="alert" className="mb-3 text-sm text-danger">
+                That time was just taken. Please choose another.
+              </p>
+            )}
+            <TimeSlots
+              slots={availability.data?.slots}
+              isLoading={isLoadingSlots}
+              error={availability.isError ? availability.error : null}
+              onRetry={() => availability.refetch()}
+              selected={startAt}
+              onSelect={chooseTime}
+            />
+          </section>
+
+          <button
+            type="button"
+            disabled={!startAt}
+            onClick={() => setStep(2)}
+            className="inline-flex min-h-11 w-full items-center justify-center rounded-full bg-accent px-5 font-semibold text-accent-foreground hover:opacity-90 disabled:opacity-60"
+          >
+            Continue
+          </button>
+        </>
+      )}
 
       {startAt && (
         // A new slot is a new attempt, so the form remounts and mints a new idempotency key.
         <BookingForm
           key={`${location}:${startAt}`}
+          step={step}
           service={service}
           date={date}
           startAt={startAt}
           location={location}
           details={details}
           onDetailsChange={setDetails}
+          onContinue={() => setStep(3)}
+          onBack={() => setStep(step === 3 ? 2 : 1)}
+          onShowDetails={() => setStep(2)}
           onBooked={onBooked}
           onSlotTaken={handleSlotTaken}
         />

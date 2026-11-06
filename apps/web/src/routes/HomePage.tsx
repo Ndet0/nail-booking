@@ -1,3 +1,4 @@
+import { Link } from "react-router";
 import heroImage from "@/assets/hero-nails.jpeg";
 import { ApiStatus } from "@/components/ApiStatus";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -81,6 +82,9 @@ export function HomePage() {
         <footer className="mt-auto flex flex-wrap items-center justify-between gap-3 border-t border-border pt-6">
           <p className="text-xs text-muted">© {new Date().getFullYear()} NAILSBYCHAO</p>
           <div className="flex items-center gap-4">
+            <Link to="/manage" className="text-xs text-muted hover:text-accent">
+              Manage a booking
+            </Link>
             <a href="/admin/login" className="text-xs text-muted hover:text-accent">
               Admin
             </a>

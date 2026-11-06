@@ -2,6 +2,7 @@ import type { BookingDto } from "@nailsbychao/types";
 import { Link } from "react-router";
 import { formatDay, formatTime, studioDateOf } from "@/lib/datetime";
 import { formatDuration, formatPhone, formatPrice } from "@/lib/format";
+import { CHANGE_POLICY } from "./policy";
 
 export function BookingConfirmation({ booking }: { booking: BookingDto }) {
   const where =
@@ -78,6 +79,23 @@ export function BookingConfirmation({ booking }: { booking: BookingDto }) {
           </div>
         )}
       </dl>
+
+      <p className="mt-6 text-sm text-muted">{CHANGE_POLICY}</p>
+      {booking.managementToken ? (
+        <p className="mt-3 text-sm">
+          Save this link. It is how you cancel or move the booking after you close this tab.{" "}
+          <Link
+            to={`/manage/${booking.bookingReference}#${booking.managementToken}`}
+            className="font-semibold text-accent hover:opacity-90"
+          >
+            Manage this booking
+          </Link>
+        </p>
+      ) : (
+        <p className="mt-3 text-sm text-muted">
+          Use the manage link you saved to cancel or move this booking.
+        </p>
+      )}
 
       <Link
         to="/"
