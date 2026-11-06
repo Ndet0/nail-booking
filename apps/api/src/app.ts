@@ -31,7 +31,7 @@ app.use(
     origin: (origin, c) => (getConfig(c.env).CORS_ORIGINS.includes(origin) ? origin : null),
     credentials: true,
     allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowHeaders: ["Content-Type", "Idempotency-Key"],
+    allowHeaders: ["Content-Type", "Idempotency-Key", "X-Booking-Token"],
     maxAge: 600,
   }),
 );

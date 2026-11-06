@@ -84,6 +84,8 @@ export type ComputeSlotsInput = {
   timeOff: Interval[];
   reservedSlots: ReadonlySet<string>;
   now: Date;
+  /** Defaults to the public booking lead time. Rescheduling passes the 24-hour cutoff. */
+  minLeadTimeMinutes?: number;
 };
 
 /**
@@ -92,7 +94,8 @@ export type ComputeSlotsInput = {
  */
 export function computeSlots(input: ComputeSlotsInput): AvailabilitySlotDto[] {
   const { before } = buffersFor(input.location);
-  const earliestStart = input.now.getTime() + STUDIO.minLeadTimeMinutes * MINUTE_MS;
+  const leadMinutes = input.minLeadTimeMinutes ?? STUDIO.minLeadTimeMinutes;
+  const earliestStart = input.now.getTime() + leadMinutes * MINUTE_MS;
   const slots: AvailabilitySlotDto[] = [];
 
   for (const period of input.workingPeriods) {

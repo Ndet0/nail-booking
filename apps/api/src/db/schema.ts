@@ -190,6 +190,8 @@ export const appointments = sqliteTable(
     address: text("address"),
     travelFeeMinor: integer("travel_fee_minor"),
     customerNotes: text("customer_notes"),
+    /** Set when the customer moves the appointment. One move is allowed. */
+    rescheduledAt: text("rescheduled_at"),
     createdAt: text("created_at").notNull().default(timestamp),
     updatedAt: text("updated_at").notNull().default(timestamp).$onUpdate(now),
   },
@@ -218,6 +220,10 @@ export const appointments = sqliteTable(
     check(
       "appointments_house_call_address",
       sql`${table.location} <> 'house_call' OR length(trim(coalesce(${table.address}, ''))) > 0`,
+    ),
+    check(
+      "appointments_rescheduled_at",
+      sql`${table.rescheduledAt} IS NULL OR ${utcInstant(table.rescheduledAt)}`,
     ),
   ],
 );

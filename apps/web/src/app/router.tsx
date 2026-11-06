@@ -8,6 +8,7 @@ import { AdminServicesPage } from "@/routes/AdminServicesPage";
 import { AdminStaffPage } from "@/routes/AdminStaffPage";
 import { BookingPage } from "@/routes/BookingPage";
 import { HomePage } from "@/routes/HomePage";
+import { ManageBookingPage } from "@/routes/ManageBookingPage";
 
 export const router = createBrowserRouter([
   {
@@ -17,6 +18,14 @@ export const router = createBrowserRouter([
   {
     path: "/book/:serviceId",
     element: <BookingPage />,
+  },
+  {
+    path: "/manage",
+    element: <ManageBookingPage />,
+  },
+  {
+    path: "/manage/:reference",
+    element: <ManageBookingPage />,
   },
   {
     path: "/admin/login",

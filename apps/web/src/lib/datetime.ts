@@ -22,6 +22,11 @@ const timeFormatter = new Intl.DateTimeFormat(LOCALE, {
 // Calendar dates are anchored at UTC midnight, so format them in UTC to keep the same day.
 const weekdayFormatter = new Intl.DateTimeFormat(LOCALE, { timeZone: "UTC", weekday: "short" });
 const monthFormatter = new Intl.DateTimeFormat(LOCALE, { timeZone: "UTC", month: "short" });
+const monthYearFormatter = new Intl.DateTimeFormat(LOCALE, {
+  timeZone: "UTC",
+  month: "long",
+  year: "numeric",
+});
 
 function dateAtUtcMidnight(date: string): Date {
   return new Date(`${date}T00:00:00.000Z`);
@@ -42,11 +47,22 @@ export function addDays(date: string, days: number): string {
   return next.toISOString().slice(0, 10);
 }
 
-/** Inclusive list of dates from `first` to `last`. */
-export function datesBetween(first: string, last: string): string[] {
-  const dates: string[] = [];
-  for (let date = first; date <= last; date = addDays(date, 1)) dates.push(date);
-  return dates;
+/** `YYYY-MM-01` for the month that contains `date`. */
+export function monthStart(date: string): string {
+  return `${date.slice(0, 7)}-01`;
+}
+
+/** First day of the month `months` away from the month containing `date`. */
+export function shiftMonth(date: string, months: number): string {
+  const value = dateAtUtcMidnight(date);
+  return new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth() + months, 1))
+    .toISOString()
+    .slice(0, 10);
+}
+
+/** 0 = Sunday through 6 = Saturday. */
+export function weekdayIndex(date: string): number {
+  return dateAtUtcMidnight(date).getUTCDay();
 }
 
 export function dayParts(date: string) {
@@ -62,6 +78,11 @@ export function dayParts(date: string) {
 export function formatDay(date: string): string {
   const { weekday, day, month } = dayParts(date);
   return `${weekday} ${day} ${month}`;
+}
+
+/** e.g. "November 2026". */
+export function formatMonth(date: string): string {
+  return monthYearFormatter.format(dateAtUtcMidnight(date));
 }
 
 /** e.g. "10:00", in studio time. */

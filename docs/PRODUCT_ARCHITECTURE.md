@@ -47,7 +47,7 @@ The administrator wants to:
 - Manage staff and service assignments.
 - Configure staff working hours and time off.
 - Update gallery images.
-- Confirm, reschedule, cancel, or complete appointments.
+- Confirm, complete, mark as no-show, or cancel appointments. Moving a time is customer-only.
 - Review booking history and basic operational information.
 
 ### 2.3 Nail technician or staff member
@@ -111,24 +111,24 @@ The following should not block the initial release:
 
 ```mermaid
 flowchart TD
-    A[Visit Studio Website] --> B[Explore Services]
+    A[Visit Home Page] --> B[Explore Services]
     B --> C[Select Service]
-    C --> D[Choose Staff or Any Available Staff]
-    D --> E[Choose Date]
+    C --> D[Choose Studio or House Call]
+    D --> E[Choose a Date on the Calendar]
     E --> F[View Available Times]
     F --> G{Slot Available?}
     G -- No --> E
     G -- Yes --> H[Enter Contact Details]
     H --> I[Review Booking]
     I --> J[Submit Booking]
-    J --> K{Booking Confirmed?}
+    J --> K{Booking Saved?}
     K -- No --> L[Explain Conflict or Validation Error]
     L --> F
     K -- Yes --> M[Show Booking Reference]
     M --> N[Display Confirmation Details]
 ```
 
-For the MVP there is a single technician, Chao (see `BUSINESS_RULES.md`). The "Choose Staff" step is skipped and bookings are assigned to her automatically. The `staff` model already exists, so the step can be added once the studio grows.
+There is a single technician, Chao (see `BUSINESS_RULES.md`). Customers do not choose a technician. The API assigns her automatically. The `staff` model already exists, so a choice can be added once the studio grows. The review step is part of the form. The confirmation screen appears after the booking is saved.
 
 ### Journey requirements
 
@@ -154,11 +154,12 @@ Features:
 - Studio name and branding.
 - Hero section with a clear booking call to action.
 - Short studio introduction.
-- Featured services.
-- Selected gallery images.
-- Opening hours and contact information.
-- Location information, when provided by the studio.
-- Footer with contact and policy links.
+- Active service catalog.
+- Published gallery images, in a section on the home page. The section stays hidden when nothing is published.
+- A Visit section with opening hours, Juja (the apartment name stays private), phone, WhatsApp, and email.
+- Footer links to manage a booking and to admin sign-in.
+
+The 24-hour cancel and reschedule policy is shown on the booking review step, the confirmation screen, and the manage page.
 
 Acceptance criteria:
 
@@ -179,8 +180,10 @@ Each service should support:
 - Price.
 - Currency.
 - Estimated duration.
-- Optional image.
+- Category (`nails` or `makeup`).
 - Active or inactive status.
+
+Service images are not part of the current catalog. The `image_key` column exists and is unused.
 
 Acceptance criteria:
 
@@ -191,14 +194,14 @@ Acceptance criteria:
 
 ### 5.3 Nail design gallery
 
-Purpose: display the studio's work and inspire customers.
+Purpose: display the studio's work and inspire customers. The gallery is a section on the home page, not a separate page.
 
 Features:
 
 - Responsive image grid.
 - Optional image titles and descriptions.
-- Featured or ordered images.
-- Administrative image management.
+- Ordered images.
+- Administrative image management. New uploads stay unpublished.
 
 Acceptance criteria:
 
@@ -254,7 +257,7 @@ Acceptance criteria:
 - A booking is not confirmed until its reservation has been committed successfully.
 - Repeated form submissions do not unintentionally create duplicate bookings.
 - Booking status changes follow defined rules.
-- Customers can retrieve or cancel bookings only through the approved verification flow.
+- Customers can retrieve, reschedule, or cancel bookings only through the approved verification flow.
 
 ### 5.6 Admin dashboard
 
@@ -265,7 +268,7 @@ Initial features:
 - Summary of upcoming bookings.
 - Booking list and date filters.
 - Booking details.
-- Booking status management.
+- Booking status management: confirm, complete, no-show, or cancel. The administrator does not move the appointment time.
 - Service management.
 - Staff management.
 - Schedule and time-off management.
@@ -303,7 +306,7 @@ Acceptance criteria:
 - The full appointment duration must fit within the permitted working period.
 - The system must prevent overlapping appointments for the same staff member.
 - A cancellation must release the corresponding reservations.
-- Rescheduling must validate the new time before replacing the existing reservation.
+- A customer may reschedule once, and only while both the current start and the new start are at least 24 hours away. The new time is validated before the existing reservation is replaced. An administrator does not reschedule.
 - A cancelled appointment must not continue blocking availability.
 - Administrative overrides must be explicit and audited.
 
@@ -379,11 +382,11 @@ The visual direction should reflect the studio's brand. Use a polished beauty-st
 The initial release can show an on-screen confirmation containing:
 
 - Booking reference.
-- Service.
-- Date and time.
-- Staff member, if selected.
-- Customer contact details summary.
-- Instructions for cancellation or rescheduling.
+- Service, price, and duration.
+- Date and time in Nairobi.
+- Studio in Juja, or the house-call address. The apartment name stays off this screen until Chao confirms a studio booking.
+- Customer name, phone, and optional email and notes.
+- Instructions for cancellation or rescheduling. The technician is assigned by the server and is not shown here.
 
 ### Future notification capabilities
 

@@ -1,10 +1,19 @@
 import { env } from "cloudflare:workers";
-import type { ApiErrorBody, ApiSuccess, BookingDto, CreateBookingInput } from "@nailsbychao/types";
+import type {
+  ApiErrorBody,
+  ApiSuccess,
+  AvailabilityDto,
+  BookingDto,
+  CreateBookingInput,
+} from "@nailsbychao/types";
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { app } from "../src/app";
 import { createDb } from "../src/db/client";
 import { reservationSlots } from "../src/modules/availability/availability.engine";
-import { insertAppointmentWithReservations } from "../src/modules/bookings/bookings.repository";
+import {
+  insertAppointmentWithReservations,
+  sha256Hex,
+} from "../src/modules/bookings/bookings.repository";
 import { addDays, localToUtc, studioToday, weekdayOf } from "../src/utils/studio-time";
 
 const TZ = "Africa/Nairobi";
@@ -343,5 +352,302 @@ describe("POST /bookings", () => {
     expect(status).toBe(409);
     if (!("error" in json)) throw new Error("expected an error");
     expect(json.error.code).toBe("slot_taken");
+  });
+});
+
+function bookingPath(reference: string, suffix = "") {
+  return `/api/v1/bookings/${encodeURIComponent(reference)}${suffix}`;
+}
+
+async function callBooking<T = BookingDto>(path: string, token?: string, init?: RequestInit) {
+  const headers = new Headers(init?.headers);
+  if (token) headers.set("X-Booking-Token", token);
+  const res = await app.request(path, { ...init, headers }, env);
+  const json = (await res.json()) as ApiSuccess<T> | ApiErrorBody;
+  return { status: res.status, json };
+}
+
+async function booked(startAt = at("10:00"), customerName = "Amina") {
+  const result = await postBooking(bookingBody(startAt, { customerName }), crypto.randomUUID());
+  if (result.status !== 201 || !("data" in result.json) || !result.json.data.managementToken) {
+    throw new Error(`expected a new booking, got ${result.status}`);
+  }
+  return result.json.data;
+}
+
+/** A canonical slot about three hours from now, inside the 24-hour change window. */
+function soon() {
+  const step = 15 * 60 * 1000;
+  return new Date(Math.ceil((Date.now() + 3 * 60 * 60 * 1000) / step) * step).toISOString();
+}
+
+async function insertTokenBooking(startAt: string, token: string, status = "pending") {
+  const id = `apt_${crypto.randomUUID().replaceAll("-", "")}`;
+  const reference = `NBC-SOON-${id.slice(-4).toUpperCase()}`;
+  await insertAppointmentWithReservations(
+    createDb(env.DB),
+    {
+      id,
+      bookingReference: reference,
+      managementTokenHash: await sha256Hex(token),
+      idempotencyKey: id,
+      customerName: "Amina",
+      customerEmail: null,
+      customerPhone: "+254712345678",
+      staffId: "bk_staff",
+      serviceId: "bk_svc",
+      serviceNameSnapshot: "Gel Polish",
+      durationMinutesSnapshot: 60,
+      priceMinorSnapshot: 150000,
+      currency: "KES",
+      startAt,
+      endAt: new Date(Date.parse(startAt) + 60 * 60 * 1000).toISOString(),
+      location: "studio",
+      address: null,
+      customerNotes: null,
+    },
+    reservationSlots(new Date(startAt), 60, "studio"),
+  );
+  if (status !== "pending") {
+    await env.DB.prepare("UPDATE appointments SET status = ? WHERE id = ?").bind(status, id).run();
+  }
+  return { id, reference };
+}
+
+describe("customer booking management", () => {
+  it("gives the same response for a missing booking, a wrong token, and no token", async () => {
+    const booking = await booked();
+    const missing = await callBooking(bookingPath("NBC-ZZZZ-ZZZZ"), "c".repeat(64));
+    const wrong = await callBooking(bookingPath(booking.bookingReference), "d".repeat(64));
+    const bare = await callBooking(bookingPath(booking.bookingReference));
+    expect(missing.status).toBe(401);
+    expect(wrong.json).toEqual(missing.json);
+    expect(bare.json).toEqual(missing.json);
+    if (!("error" in missing.json)) throw new Error("expected an error");
+    expect(missing.json.error).toMatchObject({
+      code: "unauthenticated",
+      message: "That booking link is not valid.",
+    });
+
+    const cancelled = await callBooking(
+      bookingPath(booking.bookingReference, "/cancel"),
+      "d".repeat(64),
+      {
+        method: "POST",
+      },
+    );
+    expect(cancelled.status).toBe(401);
+    expect(await slotsFor(booking.id)).toEqual(
+      reservationSlots(new Date(booking.startAt), 60, "studio"),
+    );
+  });
+
+  it("returns the booking without the management token", async () => {
+    const booking = await booked();
+    const found = await callBooking(
+      bookingPath(booking.bookingReference),
+      booking.managementToken ?? "",
+    );
+    expect(found.status).toBe(200);
+    if (!("data" in found.json)) throw new Error("expected a booking");
+    expect(found.json.data).toMatchObject({
+      id: booking.id,
+      bookingReference: booking.bookingReference,
+      managementToken: null,
+      rescheduledAt: null,
+      status: "pending",
+      address: null,
+    });
+  });
+
+  it("cancels a booking and releases its slots", async () => {
+    const booking = await booked();
+    const cancelled = await callBooking(
+      bookingPath(booking.bookingReference, "/cancel"),
+      booking.managementToken ?? "",
+      {
+        method: "POST",
+      },
+    );
+    expect(cancelled.status).toBe(200);
+    if (!("data" in cancelled.json)) throw new Error("expected a booking");
+    expect(cancelled.json.data).toMatchObject({ status: "cancelled", managementToken: null });
+    expect(await slotsFor(booking.id)).toEqual([]);
+  });
+
+  it("refuses a late cancellation and keeps the slots", async () => {
+    const token = "e".repeat(64);
+    const startAt = soon();
+    const { id, reference } = await insertTokenBooking(startAt, token);
+    const cancelled = await callBooking(bookingPath(reference, "/cancel"), token, {
+      method: "POST",
+    });
+    expect(cancelled.status).toBe(409);
+    if (!("error" in cancelled.json)) throw new Error("expected an error");
+    expect(cancelled.json.error.code).toBe("change_window_closed");
+    expect(await slotsFor(id)).toEqual(reservationSlots(new Date(startAt), 60, "studio"));
+  });
+
+  it("refuses to cancel a completed appointment", async () => {
+    const booking = await booked();
+    await env.DB.prepare("UPDATE appointments SET status = 'completed' WHERE id = ?")
+      .bind(booking.id)
+      .run();
+    const cancelled = await callBooking(
+      bookingPath(booking.bookingReference, "/cancel"),
+      booking.managementToken ?? "",
+      {
+        method: "POST",
+      },
+    );
+    expect(cancelled.status).toBe(409);
+    if (!("error" in cancelled.json)) throw new Error("expected an error");
+    expect(cancelled.json.error.code).toBe("booking_not_changeable");
+    expect(await slotsFor(booking.id)).toEqual(
+      reservationSlots(new Date(booking.startAt), 60, "studio"),
+    );
+  });
+
+  it("moves a booking onto a time its old block overlaps, then refuses a second move", async () => {
+    const booking = await booked(at("10:00"));
+    const nextStart = at("10:15");
+    const moved = await callBooking(
+      bookingPath(booking.bookingReference, "/reschedule"),
+      booking.managementToken ?? "",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ startAt: nextStart }),
+      },
+    );
+    expect(moved.status).toBe(200);
+    if (!("data" in moved.json)) throw new Error("expected a booking");
+    expect(moved.json.data.startAt).toBe(nextStart);
+    expect(moved.json.data.endAt).toBe(at("11:15"));
+    expect(moved.json.data.rescheduledAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    expect(moved.json.data.managementToken).toBeNull();
+    expect(await slotsFor(booking.id)).toEqual(reservationSlots(new Date(nextStart), 60, "studio"));
+
+    const again = await callBooking(
+      bookingPath(booking.bookingReference, "/reschedule"),
+      booking.managementToken ?? "",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ startAt: at("12:00") }),
+      },
+    );
+    expect(again.status).toBe(409);
+    if (!("error" in again.json)) throw new Error("expected an error");
+    expect(again.json.error.code).toBe("already_rescheduled");
+    expect(await slotsFor(booking.id)).toEqual(reservationSlots(new Date(nextStart), 60, "studio"));
+
+    const closed = await callBooking(
+      bookingPath(booking.bookingReference, `/availability?date=${MONDAY}`),
+      booking.managementToken ?? "",
+    );
+    expect(closed.status).toBe(409);
+    if (!("error" in closed.json)) throw new Error("expected an error");
+    expect(closed.json.error.code).toBe("already_rescheduled");
+  });
+
+  it("rolls a conflicting reschedule back and leaves the original slots", async () => {
+    const first = await booked(at("10:00"), "Amina");
+    const second = await booked(at("14:00"), "Beatrice");
+    const moved = await callBooking(
+      bookingPath(first.bookingReference, "/reschedule"),
+      first.managementToken ?? "",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ startAt: second.startAt }),
+      },
+    );
+    expect(moved.status).toBe(409);
+    if (!("error" in moved.json)) throw new Error("expected an error");
+    expect(moved.json.error.code).toBe("slot_taken");
+    const stored = await env.DB.prepare(
+      "SELECT start_at, rescheduled_at FROM appointments WHERE id = ?",
+    )
+      .bind(first.id)
+      .first<{ start_at: string; rescheduled_at: string | null }>();
+    expect(stored).toEqual({ start_at: first.startAt, rescheduled_at: null });
+    expect(await slotsFor(first.id)).toEqual(
+      reservationSlots(new Date(first.startAt), 60, "studio"),
+    );
+    expect(await slotsFor(second.id)).toEqual(
+      reservationSlots(new Date(second.startAt), 60, "studio"),
+    );
+  });
+
+  it("lets only one of two simultaneous reschedules keep the new slot", async () => {
+    const first = await booked(at("10:00"), "Amina");
+    const second = await booked(at("12:00"), "Beatrice");
+    const target = at("16:00");
+    const move = (booking: BookingDto) =>
+      callBooking(
+        bookingPath(booking.bookingReference, "/reschedule"),
+        booking.managementToken ?? "",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ startAt: target }),
+        },
+      );
+    const [left, right] = await Promise.all([move(first), move(second)]);
+    expect([left.status, right.status].sort()).toEqual([200, 409]);
+    const loser = [left, right].find((result) => result.status === 409);
+    if (!loser || !("error" in loser.json)) throw new Error("expected a conflict");
+    expect(loser.json.error.code).toBe("slot_taken");
+
+    const stored = await env.DB.prepare(
+      "SELECT id, start_at, rescheduled_at FROM appointments ORDER BY start_at",
+    ).all<{ id: string; start_at: string; rescheduled_at: string | null }>();
+    const moved = stored.results.filter((row) => row.rescheduled_at);
+    const stayed = stored.results.filter((row) => !row.rescheduled_at);
+    expect(moved).toHaveLength(1);
+    expect(moved[0]?.start_at).toBe(target);
+    expect(stayed).toHaveLength(1);
+    expect([first.startAt, second.startAt]).toContain(stayed[0]?.start_at);
+    expect(await slotsFor(moved[0]?.id ?? "")).toEqual(
+      reservationSlots(new Date(target), 60, "studio"),
+    );
+    expect(await slotsFor(stayed[0]?.id ?? "")).toEqual(
+      reservationSlots(new Date(stayed[0]?.start_at ?? ""), 60, "studio"),
+    );
+  });
+
+  it("refuses to move a booking inside the 24-hour window", async () => {
+    const token = "f".repeat(64);
+    const startAt = soon();
+    const { id, reference } = await insertTokenBooking(startAt, token);
+    const moved = await callBooking(bookingPath(reference, "/reschedule"), token, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ startAt: at("10:00") }),
+    });
+    expect(moved.status).toBe(409);
+    if (!("error" in moved.json)) throw new Error("expected an error");
+    expect(moved.json.error.code).toBe("change_window_closed");
+    expect(await slotsFor(id)).toEqual(reservationSlots(new Date(startAt), 60, "studio"));
+  });
+
+  it("offers times around the booking without offering the current start", async () => {
+    const booking = await booked(at("10:00"));
+    const found = await callBooking<AvailabilityDto>(
+      bookingPath(booking.bookingReference, `/availability?date=${MONDAY}`),
+      booking.managementToken ?? "",
+    );
+    expect(found.status).toBe(200);
+    if (!("data" in found.json)) throw new Error("expected availability");
+    const starts = found.json.data.slots.map((slot) => slot.startAt);
+    expect(starts).not.toContain(at("10:00"));
+    expect(starts).toContain(at("10:15"));
+    expect(found.json.data).toMatchObject({
+      serviceId: "bk_svc",
+      date: MONDAY,
+      location: "studio",
+      timezone: "Africa/Nairobi",
+    });
   });
 });

@@ -100,6 +100,8 @@ export type BookingDto = {
   customerNotes: string | null;
   /** Null until a house-call fee is confirmed. */
   travelFeeMinor: number | null;
+  /** When the customer moved this booking. Null if they have not. */
+  rescheduledAt: string | null;
 };
 
 export type Page<T> = {
@@ -134,6 +136,8 @@ export type AdminBookingDto = {
   staffId: string;
   staffName: string;
   createdAt: string;
+  /** When the customer moved this booking. Null if they have not. */
+  rescheduledAt: string | null;
 };
 
 export type AdminServiceDto = ServiceDto & {

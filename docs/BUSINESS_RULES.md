@@ -44,8 +44,8 @@ Inspired by [Katiani Styles](https://katiani-styles.swiftill.co.ke/): dark-first
 | Required contact details | Name + phone (Kenyan format). Email optional. Address required for house calls only. | Proposed |
 | Currency | KES, stored as integer minor units (KES 1 = 100) | Confirmed |
 | Price display | `KES 1,500` (no decimals when whole) | Proposed |
-| Cancellation | Free up to 24 hours before; later cancellations may forfeit the deposit | **TBC** |
-| Rescheduling | Allowed once, up to 24 hours before | **TBC** |
+| Cancellation | Free until 24 hours before the start. After that the customer is refused and must contact Chao. There is no deposit in the MVP, so a late cancellation is not charged. Chao can still cancel from the admin dashboard inside that window. | Working default |
+| Rescheduling | Once, and only while the current start is at least 24 hours away. The new start must also be at least 24 hours away and must pass the normal schedule checks. Service, staff, location, and address stay as booked. | Working default |
 | Deposit | Not in MVP; M-Pesa deposit is post-MVP (Sprint 9) | Proposed |
 | New booking status | `pending` until Chao confirms | **TBC** (alternative: auto-`confirmed`) |
 
@@ -62,7 +62,10 @@ These values live in `apps/api/src/config/studio.ts`. Change them there and here
 - The minimum lead time applies to the service start, not the travel buffer before it.
 - Customers can book from today up to the maximum advance window, counted in Nairobi dates. Earlier or later dates are rejected.
 - `pending` and `confirmed` bookings block availability. Cancelling a booking deletes its reservations in the same operation as the status change. `completed` and `no_show` bookings keep theirs as a record.
-- An administrator may change status only along these paths: `pending` to `confirmed` or `cancelled`; `confirmed` to `completed`, `no_show`, or `cancelled`. `cancelled`, `completed`, and `no_show` are terminal. Any other change is rejected. Rescheduling is not part of this change.
+- An administrator may change status only along these paths: `pending` to `confirmed` or `cancelled`; `confirmed` to `completed`, `no_show`, or `cancelled`. `cancelled`, `completed`, and `no_show` are terminal. Any other change is rejected. Rescheduling is not an admin status change, and the 24-hour window does not apply to Chao.
+- A customer manages a booking with the reference plus the management token (`X-Booking-Token`). The reference alone is not enough, and a wrong token looks the same as an unknown reference.
+- A customer may cancel a `pending` or `confirmed` booking until 24 hours before its start (`customerChangeCutoffMinutes`). The status becomes `cancelled` and that booking's reservations are deleted in the same batch.
+- A customer may reschedule once, while the current start is still outside that window. The new start must also be at least 24 hours away. The same batch updates `start_at`, `end_at`, and `rescheduled_at`, deletes the old slots, and inserts the new ones. A slot conflict rolls the whole move back. Service snapshots, staff, location, and address stay as booked.
 - House-call bookings must include an address.
 
 ## 4. Service catalog (placeholder)

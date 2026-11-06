@@ -38,6 +38,7 @@ function toAdminBooking(row: typeof appointments.$inferSelect, staffName: string
     staffId: row.staffId,
     staffName,
     createdAt: row.createdAt,
+    rescheduledAt: row.rescheduledAt,
   };
 }
 
