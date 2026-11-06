@@ -1,5 +1,13 @@
-import { type SQLWrapper, sql } from "drizzle-orm";
-import { check, index, integer, primaryKey, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { relations, type SQLWrapper, sql } from "drizzle-orm";
+import {
+  check,
+  index,
+  integer,
+  primaryKey,
+  sqliteTable,
+  text,
+  uniqueIndex,
+} from "drizzle-orm/sqlite-core";
 
 /** `HH:MM` in Africa/Nairobi. Zero-padded, so text order matches clock order. */
 function localTime(column: SQLWrapper) {
@@ -187,6 +195,7 @@ export const appointments = sqliteTable(
   },
   (table) => [
     index("appointments_staff_start_idx").on(table.staffId, table.startAt),
+    index("appointments_start_idx").on(table.startAt),
     check("appointments_reference_present", sql`length(${table.bookingReference}) > 0`),
     check("appointments_token_hash_present", sql`length(${table.managementTokenHash}) > 0`),
     check("appointments_customer_name_present", sql`length(${table.customerName}) > 0`),
@@ -261,3 +270,140 @@ export const galleryImages = sqliteTable(
 );
 
 export type GalleryImageRow = typeof galleryImages.$inferSelect;
+
+/**
+ * Better Auth identity tables. Drizzle property names stay camelCase because that is what the
+ * adapter looks up; SQL columns are snake_case like the rest of the database.
+ * Timestamps are Unix milliseconds (`timestamp_ms`), which is what the adapter reads and writes.
+ */
+const authTimestamp = (name: string) =>
+  integer(name, { mode: "timestamp_ms" }).notNull().default(sql`(unixepoch() * 1000)`);
+
+export const user = sqliteTable("user", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  email: text("email").notNull().unique(),
+  emailVerified: integer("email_verified", { mode: "boolean" }).notNull().default(false),
+  image: text("image"),
+  createdAt: authTimestamp("created_at"),
+  updatedAt: authTimestamp("updated_at"),
+});
+
+export type AuthUserRow = typeof user.$inferSelect;
+
+export const session = sqliteTable(
+  "session",
+  {
+    id: text("id").primaryKey(),
+    expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
+    token: text("token").notNull().unique(),
+    createdAt: authTimestamp("created_at"),
+    updatedAt: authTimestamp("updated_at"),
+    ipAddress: text("ip_address"),
+    userAgent: text("user_agent"),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+  },
+  (table) => [index("session_user_idx").on(table.userId)],
+);
+
+export const account = sqliteTable(
+  "account",
+  {
+    id: text("id").primaryKey(),
+    accountId: text("account_id").notNull(),
+    providerId: text("provider_id").notNull(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    accessToken: text("access_token"),
+    refreshToken: text("refresh_token"),
+    idToken: text("id_token"),
+    accessTokenExpiresAt: integer("access_token_expires_at", { mode: "timestamp_ms" }),
+    refreshTokenExpiresAt: integer("refresh_token_expires_at", { mode: "timestamp_ms" }),
+    scope: text("scope"),
+    password: text("password"),
+    createdAt: authTimestamp("created_at"),
+    updatedAt: authTimestamp("updated_at"),
+  },
+  (table) => [
+    index("account_user_idx").on(table.userId),
+    uniqueIndex("account_provider_account_uidx").on(table.providerId, table.accountId),
+  ],
+);
+
+export const verification = sqliteTable(
+  "verification",
+  {
+    id: text("id").primaryKey(),
+    identifier: text("identifier").notNull(),
+    value: text("value").notNull(),
+    expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
+    createdAt: authTimestamp("created_at"),
+    updatedAt: authTimestamp("updated_at"),
+  },
+  (table) => [index("verification_identifier_idx").on(table.identifier)],
+);
+
+/** Better Auth database-backed rate limit. `lastRequest` is Unix milliseconds. */
+export const rateLimit = sqliteTable("rate_limit", {
+  id: text("id").primaryKey(),
+  key: text("key").notNull().unique(),
+  count: integer("count").notNull(),
+  lastRequest: integer("last_request").notNull(),
+});
+
+/** Application admin role. A Better Auth session is not enough; this row is required. */
+export const admins = sqliteTable(
+  "admins",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .unique()
+      .references(() => user.id, { onDelete: "cascade" }),
+    role: text("role", { enum: ["admin"] }).notNull(),
+    createdAt: text("created_at").notNull().default(timestamp),
+  },
+  (table) => [check("admins_role_valid", sql`${table.role} = 'admin'`)],
+);
+
+export type AdminRow = typeof admins.$inferSelect;
+
+/**
+ * Important administrative actions. No passwords, session tokens, or extra customer fields.
+ */
+export const auditEvents = sqliteTable(
+  "audit_events",
+  {
+    id: text("id").primaryKey(),
+    actorId: text("actor_id")
+      .notNull()
+      .references(() => user.id),
+    action: text("action").notNull(),
+    entityType: text("entity_type").notNull(),
+    entityId: text("entity_id").notNull(),
+    createdAt: text("created_at").notNull().default(timestamp),
+  },
+  (table) => [
+    index("audit_events_entity_idx").on(table.entityType, table.entityId),
+    check("audit_events_action_present", sql`length(${table.action}) > 0`),
+    check("audit_events_entity_type_present", sql`length(${table.entityType}) > 0`),
+    check("audit_events_entity_id_present", sql`length(${table.entityId}) > 0`),
+  ],
+);
+
+/** Sign-in loads the credential account through this relation. The property name must be `accounts`. */
+export const userRelations = relations(user, ({ many }) => ({
+  accounts: many(account),
+  sessions: many(session),
+}));
+
+export const accountRelations = relations(account, ({ one }) => ({
+  user: one(user, { fields: [account.userId], references: [user.id] }),
+}));
+
+export const sessionRelations = relations(session, ({ one }) => ({
+  user: one(user, { fields: [session.userId], references: [user.id] }),
+}));

@@ -22,6 +22,13 @@
       "when": 1793856979575,
       "tag": "0002_hardening",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1793886525734,
+      "tag": "0003_medical_cerise",
+      "breakpoints": true
     }
   ]
 }

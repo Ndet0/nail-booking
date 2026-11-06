@@ -62,6 +62,7 @@ These values live in `apps/api/src/config/studio.ts`. Change them there and here
 - The minimum lead time applies to the service start, not the travel buffer before it.
 - Customers can book from today up to the maximum advance window, counted in Nairobi dates. Earlier or later dates are rejected.
 - `pending` and `confirmed` bookings block availability. Cancelling a booking deletes its reservations in the same operation as the status change. `completed` and `no_show` bookings keep theirs as a record.
+- An administrator may change status only along these paths: `pending` to `confirmed` or `cancelled`; `confirmed` to `completed`, `no_show`, or `cancelled`. `cancelled`, `completed`, and `no_show` are terminal. Any other change is rejected. Rescheduling is not part of this change.
 - House-call bookings must include an address.
 
 ## 4. Service catalog (placeholder)

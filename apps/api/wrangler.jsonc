@@ -3,6 +3,7 @@
   "name": "nailsbychao-api",
   "main": "src/index.ts",
   "compatibility_date": "2026-10-01",
+  "compatibility_flags": ["nodejs_compat"],
   "observability": { "enabled": true },
   "vars": {
     "ENVIRONMENT": "development",
@@ -15,6 +16,12 @@
       // Placeholder until the production database is created (Sprint 8).
       "database_id": "00000000-0000-0000-0000-000000000000",
       "migrations_dir": "migrations"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "BUCKET",
+      "bucket_name": "nailsbychao-gallery"
     }
   ]
 }

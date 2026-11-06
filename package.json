@@ -13,7 +13,9 @@
     "lint": "biome check .",
     "format": "biome format --write .",
     "db:migrate:local": "pnpm --filter @nailsbychao/api db:migrate:local",
-    "db:seed:local": "pnpm --filter @nailsbychao/api db:seed:local"
+    "db:seed:local": "pnpm --filter @nailsbychao/api db:seed:local",
+    "admin:create": "pnpm --filter @nailsbychao/api admin:create",
+    "admin:set-password": "pnpm --filter @nailsbychao/api admin:set-password"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.6.3",

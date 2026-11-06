@@ -2,8 +2,17 @@ import { z } from "zod";
 
 export type Bindings = {
   DB: D1Database;
+  BUCKET: R2Bucket;
   ENVIRONMENT: string;
   CORS_ORIGINS: string;
+  BETTER_AUTH_SECRET: string;
+  BETTER_AUTH_URL: string;
+};
+
+/** Set by `requireAdmin` after the session and admins row are both present. */
+export type AdminActor = {
+  userId: string;
+  adminId: string;
 };
 
 const varsSchema = z.object({
@@ -17,6 +26,8 @@ const varsSchema = z.object({
         .map((origin) => origin.trim())
         .filter(Boolean),
     ),
+  BETTER_AUTH_SECRET: z.string().min(32),
+  BETTER_AUTH_URL: z.string().url(),
 });
 
 export type Config = z.infer<typeof varsSchema>;
@@ -37,4 +48,7 @@ export function getConfig(env: Bindings): Config {
 
 export type AppEnv = {
   Bindings: Bindings;
+  Variables: {
+    admin: AdminActor;
+  };
 };

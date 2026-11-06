@@ -9,11 +9,14 @@
     "test": "vitest run",
     "db:generate": "drizzle-kit generate",
     "db:migrate:local": "wrangler d1 migrations apply nailsbychao-db --local",
-    "db:seed:local": "wrangler d1 execute nailsbychao-db --local --file seed/services.sql && wrangler d1 execute nailsbychao-db --local --file seed/schedule.sql"
+    "db:seed:local": "wrangler d1 execute nailsbychao-db --local --file seed/services.sql && wrangler d1 execute nailsbychao-db --local --file seed/schedule.sql",
+    "admin:create": "node scripts/admin-account.mjs create",
+    "admin:set-password": "node scripts/admin-account.mjs set-password"
   },
   "dependencies": {
     "@hono/zod-validator": "^0.9.1",
     "@nailsbychao/types": "workspace:*",
+    "better-auth": "^1.7.16",
     "drizzle-orm": "^0.45.4",
     "hono": "^4.13.14",
     "zod": "^4.6.7"

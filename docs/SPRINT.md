@@ -135,7 +135,7 @@ A task is complete when:
 - [x] Define the `appointments` table.
 - [x] Define the slot-reservation or equivalent conflict-prevention table.
 - [x] Define the `gallery_images` table.
-- [ ] Define any required user and admin identity tables. *Deferred to Sprint 6: the tables depend on the auth library chosen there. `audit_events` is deferred with them.*
+- [x] Define any required user and admin identity tables. *Better Auth `user`, `session`, `account`, `verification`, and `rate_limit`, plus `admins` and `audit_events`, added in Sprint 6.*
 - [x] Add primary keys, foreign keys, unique constraints, and indexes.
 - [x] Use integer minor units for monetary values.
 - [x] Define the appointment status values.
@@ -143,7 +143,7 @@ A task is complete when:
 - [x] Implement service repository functions.
 - [x] Implement `GET /api/v1/services`.
 - [x] Implement `GET /api/v1/services/:id`.
-- [ ] Implement service validation. *The database CHECKs reject invalid rows. The Zod schemas for service writes come with admin service management in Sprint 6.*
+- [x] Implement service validation. *Database CHECKs reject invalid rows. Admin service writes use Zod schemas.*
 - [x] Build the public service catalog page.
 - [x] Add service detail presentation. *Shown at the top of the booking page.*
 - [x] Add loading, empty, and error states.
@@ -172,16 +172,16 @@ A task is complete when:
 
 ### Checklist
 
-- [ ] Build the landing page.
-- [ ] Add the studio branding and introduction.
-- [ ] Add the main booking call to action.
-- [ ] Add featured services.
-- [ ] Build the gallery page or section.
-- [ ] Implement `GET /api/v1/gallery`.
-- [ ] Add gallery metadata and publication status.
-- [ ] Configure Cloudflare R2 for image storage, if included in this sprint.
-- [ ] Validate image file types and upload sizes.
-- [ ] Configure safe image delivery.
+- [x] Build the landing page. *Hero, wordmark, and service list on `/`.*
+- [x] Add the studio branding and introduction.
+- [x] Add the main booking call to action. *The hero jumps to the service list, and each service links to booking.*
+- [x] Add featured services. *The home page lists the active catalog.*
+- [x] Build the gallery page or section. *Published images on the home page. The section stays hidden when nothing is published.*
+- [x] Implement `GET /api/v1/gallery`.
+- [x] Add gallery metadata and publication status. *New uploads stay unpublished.*
+- [x] Configure Cloudflare R2 for image storage, if included in this sprint. *Local `BUCKET` binding. No Cloudflare account is required for local development.*
+- [x] Validate image file types and upload sizes. *JPEG, PNG, and WebP by magic bytes, 5 MB cap.*
+- [x] Configure safe image delivery. *Public bytes only for published images. Admin preview is authenticated.*
 - [x] Add contact and opening-hours information. *Public site shows Juja, hours, phone, WhatsApp, and email. The apartment name stays private.*
 - [ ] Add the cancellation policy and relevant booking guidance.
 - [ ] Ensure the interface is mobile-responsive.
@@ -256,27 +256,27 @@ A task is complete when:
 
 ### Checklist
 
-- [ ] Define the final booking request schema.
-- [ ] Validate customer contact information.
-- [ ] Generate unique booking references.
-- [ ] Implement `POST /api/v1/bookings`.
-- [ ] Recheck availability when the booking is submitted.
-- [ ] Create appointment records with service snapshots.
-- [ ] Implement atomic slot reservations or the selected concurrency-control mechanism.
-- [ ] Ensure a failed reservation cannot leave a partial booking.
-- [ ] Implement duplicate-submission protection.
-- [ ] Return a clear conflict response when a slot is taken.
-- [ ] Build the booking form.
-- [ ] Add customer details collection.
-- [ ] Add a booking review step if appropriate.
-- [ ] Build the booking confirmation screen.
-- [ ] Display the booking reference and appointment summary.
-- [ ] Test invalid booking requests.
-- [ ] Test repeated submissions.
-- [ ] Test two simultaneous requests for the same slot.
-- [ ] Test overlapping appointments for the same staff member.
-- [ ] Test booking creation against a D1-compatible environment.
-- [ ] Document the concurrency guarantees of the chosen implementation.
+- [x] Define the final booking request schema.
+- [x] Validate customer contact information. *Name and a Kenyan phone number are required. Email is optional. A house call requires an address.*
+- [x] Generate unique booking references.
+- [x] Implement `POST /api/v1/bookings`.
+- [x] Recheck availability when the booking is submitted.
+- [x] Create appointment records with service snapshots.
+- [x] Implement atomic slot reservations or the selected concurrency-control mechanism. *One D1 batch inserts the appointment and every `reservationSlots` row. The primary key `(staff_id, slot_start_at)` is the lock.*
+- [x] Ensure a failed reservation cannot leave a partial booking.
+- [x] Implement duplicate-submission protection. *`Idempotency-Key` returns the original booking. The same key with different details is rejected.*
+- [x] Return a clear conflict response when a slot is taken.
+- [x] Build the booking form.
+- [x] Add customer details collection.
+- [x] Add a booking review step if appropriate. *The form keeps the chosen time visible, and the confirmation screen is the summary.*
+- [x] Build the booking confirmation screen.
+- [x] Display the booking reference and appointment summary.
+- [x] Test invalid booking requests.
+- [x] Test repeated submissions.
+- [x] Test two simultaneous requests for the same slot.
+- [x] Test overlapping appointments for the same staff member.
+- [x] Test booking creation against a D1-compatible environment.
+- [x] Document the concurrency guarantees of the chosen implementation. *See TECHNICAL_ARCHITECTURE.md, Concurrency strategy.*
 
 ### Critical technical requirement
 
@@ -310,29 +310,29 @@ If D1's supported write operations and constraints do not provide the required g
 
 ### Checklist
 
-- [ ] Select an authentication solution compatible with Workers and D1.
-- [ ] Add the admin identity and `audit_events` tables required by the chosen solution.
-- [ ] Configure secure sessions or the selected authentication mechanism.
-- [ ] Create the initial administrator account securely.
-- [ ] Ensure public registration cannot grant admin privileges.
-- [ ] Implement server-side admin authorization middleware.
-- [ ] Build the admin login page.
-- [ ] Build the admin dashboard layout.
-- [ ] Display upcoming appointments.
-- [ ] Add booking date filters.
-- [ ] Add booking status filters.
-- [ ] Build the booking detail view.
-- [ ] Implement permitted booking status changes.
-- [ ] Implement service creation.
-- [ ] Implement service updates and deactivation.
-- [ ] Implement staff management.
-- [ ] Implement staff-service assignments.
-- [ ] Implement working-hours management.
-- [ ] Implement time-off management.
-- [ ] Implement gallery management if not completed earlier.
-- [ ] Add audit events for important administrative actions.
-- [ ] Test unauthorized access to every protected route.
-- [ ] Test invalid and expired sessions.
+- [x] Select an authentication solution compatible with Workers and D1. *Better Auth, email and password, Drizzle adapter on D1.*
+- [x] Add the admin identity and `audit_events` tables required by the chosen solution.
+- [x] Configure secure sessions or the selected authentication mechanism. *HttpOnly, SameSite=Lax session cookie. Sign-in is rate limited in D1.*
+- [x] Create the initial administrator account securely. *`pnpm admin:create` from environment variables. `pnpm admin:set-password` replaces it. Nothing hashed is committed.*
+- [x] Ensure public registration cannot grant admin privileges. *HTTP sign-up is disabled, and a session still needs an `admins` row.*
+- [x] Implement server-side admin authorization middleware.
+- [x] Build the admin login page.
+- [x] Build the admin dashboard layout.
+- [x] Display upcoming appointments.
+- [x] Add booking date filters.
+- [x] Add booking status filters.
+- [x] Build the booking detail view.
+- [x] Implement permitted booking status changes.
+- [x] Implement service creation.
+- [x] Implement service updates and deactivation.
+- [x] Implement staff management.
+- [x] Implement staff-service assignments.
+- [x] Implement working-hours management.
+- [x] Implement time-off management.
+- [x] Implement gallery management if not completed earlier.
+- [x] Add audit events for important administrative actions.
+- [x] Test unauthorized access to every protected route.
+- [x] Test invalid and expired sessions.
 
 ### Deliverables
 
