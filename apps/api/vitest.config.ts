@@ -13,7 +13,12 @@ export default defineConfig(async () => {
       cloudflareTest({
         wrangler: { configPath: "./wrangler.jsonc" },
         miniflare: {
-          bindings: { ENVIRONMENT: "test", TEST_MIGRATIONS: migrations },
+          bindings: {
+            ENVIRONMENT: "test",
+            TEST_MIGRATIONS: migrations,
+            BETTER_AUTH_SECRET: "test-only-better-auth-secret-32chars",
+            BETTER_AUTH_URL: "http://localhost:5173",
+          },
         },
       }),
     ],

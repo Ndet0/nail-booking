@@ -7,22 +7,30 @@ export class ApiError extends Error {
     readonly status: number,
     readonly code: string,
     message: string,
+    readonly details?: unknown,
   ) {
     super(message);
     this.name = "ApiError";
   }
 }
 
-export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+export async function apiFetch<T>(
+  path: string,
+  init?: RequestInit & { auth?: boolean },
+): Promise<T> {
+  const { auth, ...rest } = init ?? {};
   let response: Response;
   try {
     response = await fetch(`${API_BASE}${path}`, {
-      ...init,
-      headers: { Accept: "application/json", ...init?.headers },
+      ...rest,
+      credentials: auth ? "include" : "same-origin",
+      headers: { Accept: "application/json", ...rest.headers },
     });
   } catch {
     throw new ApiError(0, "network_error", "We couldn't reach the server. Check your connection.");
   }
+
+  if (response.status === 204) return undefined as T;
 
   const body = (await response.json().catch(() => null)) as ApiSuccess<T> | ApiErrorBody | null;
 
@@ -32,6 +40,7 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
       response.status,
       error?.code ?? "request_failed",
       error?.message ?? "Something went wrong. Please try again.",
+      error?.details,
     );
   }
   return body.data;

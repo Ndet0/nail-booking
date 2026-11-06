@@ -31,6 +31,11 @@ export function studioToday(): string {
   return todayFormatter.format(new Date());
 }
 
+/** Calendar date of a UTC instant, in studio time. `YYYY-MM-DD`. */
+export function studioDateOf(instant: string): string {
+  return todayFormatter.format(new Date(instant));
+}
+
 export function addDays(date: string, days: number): string {
   const next = dateAtUtcMidnight(date);
   next.setUTCDate(next.getUTCDate() + days);
@@ -62,4 +67,22 @@ export function formatDay(date: string): string {
 /** e.g. "10:00", in studio time. */
 export function formatTime(instant: string): string {
   return timeFormatter.format(new Date(instant));
+}
+
+/**
+ * UTC instant for a Nairobi wall-clock time. Kenya is UTC+3 and does not observe daylight saving.
+ */
+export function nairobiToUtc(date: string, time: string): string {
+  const [year, month, day] = date.split("-").map(Number);
+  const [hour, minute] = time.split(":").map(Number);
+  if (
+    year === undefined ||
+    month === undefined ||
+    day === undefined ||
+    hour === undefined ||
+    minute === undefined
+  ) {
+    throw new Error("Use a date and a time.");
+  }
+  return new Date(Date.UTC(year, month - 1, day, hour - 3, minute)).toISOString();
 }

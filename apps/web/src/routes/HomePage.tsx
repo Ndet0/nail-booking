@@ -1,6 +1,7 @@
 import heroImage from "@/assets/hero-nails.jpeg";
 import { ApiStatus } from "@/components/ApiStatus";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { GallerySection } from "@/features/gallery/GallerySection";
 import { ServiceList } from "@/features/services/ServiceList";
 
 const INSTAGRAM_URL = "https://www.instagram.com/nailsbychao_/";
@@ -73,11 +74,18 @@ export function HomePage() {
           </p>
         </main>
 
+        <GallerySection />
+
         <ContactSection />
 
         <footer className="mt-auto flex flex-wrap items-center justify-between gap-3 border-t border-border pt-6">
           <p className="text-xs text-muted">© {new Date().getFullYear()} NAILSBYCHAO</p>
-          <ApiStatus />
+          <div className="flex items-center gap-4">
+            <a href="/admin/login" className="text-xs text-muted hover:text-accent">
+              Admin
+            </a>
+            <ApiStatus />
+          </div>
         </footer>
       </div>
     </div>

@@ -13,6 +13,12 @@ export function formatPrice(priceMinor: number, currency: string): string {
     .replace(/ /g, " ");
 }
 
+/** Groups a normalized Kenyan number, e.g. "+254712345678" -> "+254 712 345 678". */
+export function formatPhone(phone: string): string {
+  const match = /^\+254(\d{3})(\d{3})(\d{3})$/.exec(phone);
+  return match ? `+254 ${match[1]} ${match[2]} ${match[3]}` : phone;
+}
+
 export function formatDuration(minutes: number): string {
   const hours = Math.floor(minutes / 60);
   const rest = minutes % 60;

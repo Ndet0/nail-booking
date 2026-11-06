@@ -1,0 +1,9 @@
+# Copy to .dev.vars in this directory. That file is gitignored.
+# Generate a secret with: node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"
+BETTER_AUTH_SECRET=
+BETTER_AUTH_URL=http://localhost:5173
+
+# Used only by `pnpm admin:create` and `pnpm admin:set-password`. Never commit these.
+# ADMIN_EMAIL=
+# ADMIN_PASSWORD=
+# ADMIN_NAME=Chao

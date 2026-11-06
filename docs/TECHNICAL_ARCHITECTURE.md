@@ -233,35 +233,24 @@ These are optional extensions and should not block the first working version.
 
 The following entities form the initial logical data model. The source of truth for columns and constraints is `apps/api/src/db/schema.ts` and the migrations generated from it.
 
-All instants (`*_at` columns) are stored as canonical UTC text in the form `YYYY-MM-DDTHH:MM:SS.SSSZ`, which is what `Date#toISOString` produces. CHECK constraints enforce this format. Because instants are compared and used as keys in text form, one consistent format is required for correctness.
+Studio instants (`*_at` columns on appointments, hours, time off, gallery, and audit rows) are stored as canonical UTC text in the form `YYYY-MM-DDTHH:MM:SS.SSSZ`, which is what `Date#toISOString` produces. CHECK constraints enforce this format. Because instants are compared and used as keys in text form, one consistent format is required for correctness. Better Auth tables are the exception: their timestamps are integer epoch milliseconds.
 
-### `users`
+### Authentication tables
 
-Stores customer identity and account information when customer accounts are enabled.
+Admin sign-in uses Better Auth on D1. Its Drizzle tables are `user`, `session`, `account`, `verification`, and `rate_limit`. Those timestamps are integer epoch milliseconds, which is what the library writes. Studio tables keep canonical UTC text.
 
-Suggested fields:
-
-- `id`
-- `name`
-- `email`
-- `phone`
-- `created_at`
-- `updated_at`
-
-Normalize email addresses before lookup. Avoid requiring customers to create an account for the initial guest-booking flow.
+Customer accounts are not enabled. Guest booking does not create a `user` row. Public HTTP sign-up is disabled, so this table is filled only by `pnpm admin:create`.
 
 ### `admins`
 
-Stores application-specific administrative roles or references to the selected authentication provider.
-
-Suggested fields:
+One row per administrator. A Better Auth session is not enough.
 
 - `id`
-- `user_id` or authentication subject
-- `role`
+- `user_id` (unique, foreign key to `user`, cascade on delete)
+- `role` (`admin` only)
 - `created_at`
 
-Public registration must never grant administrative privileges.
+Public registration must never grant administrative privileges. Staff logins are out of scope.
 
 ### `services`
 
@@ -426,12 +415,10 @@ Suggested fields:
 
 ### `audit_events`
 
-Records important administrative operations. Not created yet: it is added in Sprint 6 together with the admin identity tables.
-
-Suggested fields:
+Records important administrative operations in the same D1 batch as the change.
 
 - `id`
-- `actor_id`
+- `actor_id` (the Better Auth user id)
 - `action`
 - `entity_type`
 - `entity_id`
@@ -479,11 +466,13 @@ If a slot is no longer available, return a clear conflict response and ask the c
 
 D1 uses SQLite semantics, so do not assume that a general-purpose PostgreSQL locking pattern will work.
 
-For a fixed-increment booking model, unique slot-reservation constraints combined with an atomic, rollback-safe write operation can prevent two appointments from reserving the same staff/time slot.
+`POST /api/v1/bookings` rechecks the slot with `computeSlots`, then inserts the appointment and every `reservationSlots` row in one D1 batch (`db.batch`). D1 runs that batch atomically: if any statement fails, none of them are kept. A failed attempt cannot leave an appointment without its reservations, or reservations without an appointment.
 
-Test the chosen D1 operation and failure behavior directly. If the required guarantees cannot be established for the chosen implementation, introduce a serialized booking coordinator, such as a Durable Object, before production launch.
+The lock is the primary key `(staff_id, slot_start_at)` on `appointment_slot_reservations`. Two requests can both pass the recheck. The batch that commits second fails that primary key, and the API returns `409 slot_taken`. The API never returns a booking until that batch succeeds.
 
-The API must never confirm a booking before the reservation operation succeeds.
+The `Idempotency-Key` is unique on `appointments`. The same key and the same details return the original booking and do not insert again. The same key with different details returns `409 idempotency_conflict`. The management token is returned only by the insert response; the database stores its SHA-256.
+
+`apps/api/test/bookings.test.ts` runs these cases against the local D1 binding, including two overlapping writes and a batch that fails on the reservation primary key. A Durable Object is not required for this single-technician design. Introduce one before production if those tests stop showing that one of the two writes loses, or if a booking no longer fits in a single batch.
 
 ### Timezone
 
@@ -507,6 +496,7 @@ Use a versioned REST API under `/api/v1`.
 | GET | `/api/v1/services/:id` | Get service details |
 | GET | `/api/v1/staff` | List bookable staff |
 | GET | `/api/v1/gallery` | List published gallery images |
+| GET | `/api/v1/gallery/:id/image` | Image bytes for a published gallery image |
 | GET | `/api/v1/availability` | Find available slots |
 | POST | `/api/v1/bookings` | Create a booking |
 | GET | `/api/v1/bookings/:reference` | Retrieve a booking using an authorized lookup mechanism |
@@ -543,24 +533,72 @@ The booking lookup must not expose private appointment details based only on a p
   - `404 service_not_found` for unknown or inactive services.
 - Implementation: `apps/api/src/modules/availability/`. The pure engine (`availability.engine.ts`) also exports `reservationSlots`. Booking creation must use that same function when it writes reservation rows, so availability and conflict locking agree.
 
+#### `POST /api/v1/bookings`
+
+Header: `Idempotency-Key`, required. 16–128 letters, numbers, hyphens, or underscores.
+
+```json
+{
+  "serviceId": "svc_gel",
+  "startAt": "2026-11-10T06:00:00.000Z",
+  "location": "studio",
+  "customerName": "Amina",
+  "customerPhone": "0712 345 678",
+  "customerEmail": "amina@example.com"
+}
+```
+
+A house call also sends `address`. A studio booking ignores `address`. The response never includes the studio's apartment name.
+
+`startAt` is the service start: a canonical UTC instant on a 15-minute boundary, without buffers. The server rechecks that this start is still offered, assigns an eligible staff member, and stores snapshots of the service name, duration, and price. New bookings are `pending`. `travelFeeMinor` stays null until a house-call fee is set.
+
+- `201` creates the booking. `managementToken` is returned once.
+- `200` replays the original booking when the same key and the same details are sent again. `managementToken` is null.
+- `400 validation_error` for a bad body or idempotency key.
+- `400 date_out_of_range` when the Nairobi date is outside the booking window.
+- `404 service_not_found` for an unknown or inactive service.
+- `409 slot_taken` when the time is not offered or was just reserved.
+- `409 idempotency_conflict` when the key was already used for different details.
+
+Implementation: `apps/api/src/modules/bookings/`. Reservation rows come from `reservationSlots`.
+
 ### Admin endpoints
+
+Every route below requires a session and an `admins` row. Missing or expired session is `401 unauthenticated`. A session without that row is `403 forbidden`. Lists use `limit` (default 50, max 100) and an opaque cursor.
 
 | Method | Endpoint | Purpose |
 |---|---|---|
-| GET | `/api/v1/admin/bookings` | List bookings with filters |
-| PATCH | `/api/v1/admin/bookings/:id` | Update permitted booking details |
-| GET | `/api/v1/admin/services` | Manage service catalog |
+| GET | `/api/v1/admin/me` | Signed-in administrator |
+| GET | `/api/v1/admin/bookings` | List bookings. Default is upcoming. Filters: `from`, `to`, `status` |
+| GET | `/api/v1/admin/bookings/:id` | Booking detail, including contact and staff name |
+| PATCH | `/api/v1/admin/bookings/:id` | Status only. See the transitions below |
+| GET | `/api/v1/admin/services` | List services, including inactive |
 | POST | `/api/v1/admin/services` | Create a service |
-| PATCH | `/api/v1/admin/services/:id` | Update a service |
-| GET | `/api/v1/admin/staff` | Manage staff |
+| PATCH | `/api/v1/admin/services/:id` | Update or deactivate a service |
+| GET | `/api/v1/admin/staff` | List staff |
 | POST | `/api/v1/admin/staff` | Create a staff member |
-| PATCH | `/api/v1/admin/staff/:id` | Update a staff member |
-| GET | `/api/v1/admin/schedules` | View schedules |
-| POST | `/api/v1/admin/time-off` | Add staff unavailability |
-| GET | `/api/v1/admin/gallery` | Manage gallery images |
-| POST | `/api/v1/admin/gallery` | Add gallery metadata or initiate an upload |
+| PATCH | `/api/v1/admin/staff/:id` | Update name, bio, and active flag |
+| PUT | `/api/v1/admin/staff/:id/services` | Replace service assignments |
+| GET | `/api/v1/admin/staff/:id/hours` | List weekly hours |
+| PUT | `/api/v1/admin/staff/:id/hours` | Replace weekly hours. Overlapping intervals on one weekday are rejected |
+| GET | `/api/v1/admin/time-off` | List time off |
+| POST | `/api/v1/admin/time-off` | Add time off. Dates and times are Nairobi local |
+| DELETE | `/api/v1/admin/time-off/:id` | Remove time off |
+| GET | `/api/v1/admin/gallery` | List gallery images, including unpublished |
+| POST | `/api/v1/admin/gallery` | Upload a JPEG, PNG, or WebP (magic bytes, 5 MB). The row stays unpublished |
+| GET | `/api/v1/admin/gallery/:id/image` | Authenticated preview bytes |
+| PATCH | `/api/v1/admin/gallery/:id` | Edit metadata, publication, and order |
+| DELETE | `/api/v1/admin/gallery/:id` | Delete the object and the row |
 
-Implement only endpoints needed by the current sprint. This table is the planned API surface, not a requirement to build everything immediately.
+Sign-in is `POST /api/auth/sign-in/email`. Sign-out is `POST /api/auth/sign-out`. The session cookie is HttpOnly and SameSite=Lax.
+
+Status changes:
+
+- `pending` → `confirmed` or `cancelled`
+- `confirmed` → `completed`, `no_show`, or `cancelled`
+- `cancelled`, `completed`, and `no_show` are terminal
+
+Anything else is `409 invalid_status_transition`. Cancellation deletes that appointment's slot reservations in the same batch. Other transitions leave the reservations in place. Rescheduling is not implemented.
 
 ### API conventions
 
@@ -577,16 +615,14 @@ Implement only endpoints needed by the current sprint. This table is the planned
 
 ## 9. Authentication and Authorization
 
-Use a maintained authentication solution only after verifying that it supports the selected Cloudflare Workers and D1 deployment model.
+Admin authentication is Better Auth (email and password) with its Drizzle adapter on D1. The Worker creates one auth instance per environment, mounted at `/api/auth/*`. `nodejs_compat` is required. Lucia is unmaintained, and a custom password protocol is not used.
 
-Before selecting a library, verify:
-
-- Compatibility with the current Workers runtime.
-- Support for D1 or a compatible session-storage strategy.
-- Secure session cookies and expiration.
-- Password reset or another safe account-recovery mechanism if passwords are used.
-- CSRF protections where applicable.
-- Secure logout and session revocation.
+- Sessions last 7 days, stored in D1. The cookie is HttpOnly and SameSite=Lax. It is Secure in production.
+- `emailAndPassword.disableSignUp` is true. The HTTP sign-up route does not create a user.
+- `requireAdmin` checks the session and an `admins` row. Logout deletes the session row.
+- Sign-in uses Better Auth's database-backed rate limit (`/sign-in/email`, 10 requests per 60 seconds; raised in tests).
+- The first administrator is created with `pnpm admin:create` (`ADMIN_EMAIL`, `ADMIN_PASSWORD`, `ADMIN_NAME`). `pnpm admin:set-password` replaces that password and deletes the user's sessions. Email reset waits until a mail provider exists.
+- `BETTER_AUTH_SECRET` and `BETTER_AUTH_URL` live in gitignored `.dev.vars` locally. See `apps/api/.dev.vars.example`. Production secrets stay out of the repo.
 
 For the MVP:
 
@@ -597,7 +633,7 @@ For the MVP:
 - Public registration cannot create admin users.
 - Sensitive admin changes are audited.
 
-Do not store plaintext passwords or invent a custom authentication protocol.
+Do not store plaintext passwords.
 
 ---
 

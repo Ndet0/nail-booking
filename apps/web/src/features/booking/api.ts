@@ -1,6 +1,22 @@
-import type { AppointmentLocation, AvailabilityDto } from "@nailsbychao/types";
+import type {
+  AppointmentLocation,
+  AvailabilityDto,
+  BookingDto,
+  CreateBookingInput,
+} from "@nailsbychao/types";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
+
+export function createBooking(input: CreateBookingInput, idempotencyKey: string) {
+  return apiFetch<BookingDto>("/bookings", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Idempotency-Key": idempotencyKey,
+    },
+    body: JSON.stringify(input),
+  });
+}
 
 export function useAvailability(serviceId: string, date: string, location: AppointmentLocation) {
   return useQuery({
