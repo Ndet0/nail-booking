@@ -1,20 +1,30 @@
 import type { BookingDto, BookingStatus } from "@nailsbychao/types";
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, type ReactNode, useEffect, useState } from "react";
-import { Link, useLocation, useNavigate, useParams } from "react-router";
-import { ThemeToggle } from "@/components/ThemeToggle";
+import { useLocation, useNavigate, useParams } from "react-router";
+import { SiteHeader } from "@/components/SiteHeader";
 import {
   cancelBooking,
   getBooking,
   getBookingAvailability,
+  lookupBooking,
   rescheduleBooking,
+  useBookingClosedDates,
 } from "@/features/booking/api";
+import { BookingNotifications } from "@/features/booking/BookingNotifications";
 import { DateCalendar } from "@/features/booking/DateCalendar";
 import { CHANGE_POLICY, canCustomerChange } from "@/features/booking/policy";
 import { loadManagementToken, saveManagementToken } from "@/features/booking/saved-booking";
 import { TimeSlots } from "@/features/booking/TimeSlots";
 import { ApiError } from "@/lib/api";
-import { addDays, formatDay, formatTime, studioDateOf, studioToday } from "@/lib/datetime";
+import {
+  addDays,
+  firstOpenDate,
+  formatDay,
+  formatTime,
+  studioDateOf,
+  studioToday,
+} from "@/lib/datetime";
 import { formatDuration, formatPhone, formatPrice } from "@/lib/format";
 
 const PHONE_DISPLAY = "+254 113 563 021";
@@ -26,17 +36,11 @@ const REFERENCE_PATTERN = /^NBC-[A-Z0-9]{4}-[A-Z0-9]{4}$/;
 export function ManageBookingPage() {
   const { reference = "" } = useParams();
   return (
-    <div className="page-x mx-auto w-full min-w-0 max-w-2xl py-8">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <Link
-          to="/"
-          className="inline-flex min-h-11 min-w-0 items-center text-sm text-muted hover:text-accent"
-        >
-          ← All services
-        </Link>
-        <ThemeToggle />
+    <div className="flex min-h-dvh min-w-0 flex-col">
+      <SiteHeader />
+      <div className="page-x mx-auto w-full min-w-0 max-w-2xl flex-1 py-8">
+        {reference ? <BookingManager key={reference} reference={reference} /> : <LookupForm />}
       </div>
-      {reference ? <BookingManager key={reference} reference={reference} /> : <LookupForm />}
     </div>
   );
 }
@@ -107,6 +111,7 @@ function ManagedBooking({ reference, token }: { reference: string; token: string
       onUpdated={(booking) => {
         queryClient.setQueryData(["booking", reference], booking);
         void queryClient.invalidateQueries({ queryKey: ["booking-availability", reference] });
+        void queryClient.invalidateQueries({ queryKey: ["booking-notifications", reference] });
       }}
     />
   );
@@ -252,6 +257,8 @@ function BookingDetail({
           onError={setActionError}
         />
       )}
+
+      <BookingNotifications reference={booking.bookingReference} token={token} />
     </section>
   );
 }
@@ -294,6 +301,17 @@ function ReschedulePicker({
   });
 
   const lastDate = availability.data?.lastBookableDate ?? addDays(today, 60);
+  const closedDates = useBookingClosedDates(booking.bookingReference, token, today, lastDate);
+
+  useEffect(() => {
+    const dates = closedDates.data?.dates;
+    if (!dates) return;
+    const next = firstOpenDate(date, today, lastDate, dates);
+    if (next !== date) {
+      setDate(next);
+      setStartAt(null);
+    }
+  }, [closedDates.data, date, today, lastDate]);
 
   return (
     <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-6">
@@ -308,6 +326,7 @@ function ReschedulePicker({
           firstDate={today}
           lastDate={lastDate}
           selected={date}
+          closedDates={closedDates.data?.dates}
           onSelect={(next) => {
             setDate(next);
             setStartAt(null);
@@ -358,6 +377,115 @@ function LookupForm({
 }) {
   const navigate = useNavigate();
   const [reference, setReference] = useState(initialReference);
+  const [phone, setPhone] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
+  const [showLink, setShowLink] = useState(false);
+
+  function openBooking(nextReference: string, nextToken: string) {
+    saveManagementToken(nextReference, nextToken);
+    setError(null);
+    if (onFound) onFound(nextReference, nextToken);
+    else navigate(`/manage/${encodeURIComponent(nextReference)}`);
+  }
+
+  async function onPhoneSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setPending(true);
+    setError(null);
+    try {
+      const booking = await lookupBooking(reference, phone);
+      if (!booking.managementToken) {
+        setError("Those details don't match a booking.");
+        return;
+      }
+      openBooking(booking.bookingReference, booking.managementToken);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Couldn't find that booking.");
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return (
+    <div className="mt-6 grid gap-4">
+      <form
+        noValidate
+        onSubmit={onPhoneSubmit}
+        className="grid gap-4 rounded-card border border-border bg-surface p-5"
+      >
+        <div>
+          <h1 className="text-2xl font-semibold">Manage my booking</h1>
+          <p className="mt-2 text-sm text-muted">
+            Enter the booking reference and the phone number you booked with.
+          </p>
+        </div>
+        <label className="text-sm font-semibold" htmlFor="manage-reference">
+          Booking reference
+          <input
+            id="manage-reference"
+            name="reference"
+            autoComplete="off"
+            spellCheck={false}
+            value={reference}
+            onChange={(event) => setReference(event.target.value)}
+            className="mt-1.5 min-h-11 w-full rounded-card border border-border bg-background px-3 font-normal"
+          />
+        </label>
+        <label className="text-sm font-semibold" htmlFor="manage-phone">
+          Phone number
+          <input
+            id="manage-phone"
+            name="phone"
+            type="tel"
+            inputMode="tel"
+            autoComplete="tel"
+            placeholder="0712 345 678"
+            value={phone}
+            onChange={(event) => setPhone(event.target.value)}
+            className="mt-1.5 min-h-11 w-full rounded-card border border-border bg-background px-3 font-normal"
+          />
+        </label>
+        {error && (
+          <p role="alert" className="text-sm text-danger">
+            {error}
+          </p>
+        )}
+        <button
+          type="submit"
+          disabled={pending}
+          className="inline-flex min-h-11 items-center justify-center rounded-full bg-accent px-5 font-semibold text-accent-foreground hover:opacity-90 disabled:opacity-60"
+        >
+          {pending ? "Finding…" : "Find booking"}
+        </button>
+      </form>
+
+      <div className="rounded-card border border-border bg-surface p-5">
+        <button
+          type="button"
+          aria-expanded={showLink}
+          onClick={() => {
+            setShowLink((open) => !open);
+            setError(null);
+          }}
+          className="inline-flex min-h-11 items-center text-sm font-semibold text-accent"
+        >
+          {showLink ? "Hide the saved link" : "I saved the manage link"}
+        </button>
+        {showLink && <LinkLookup initialReference={reference} onOpen={openBooking} />}
+      </div>
+    </div>
+  );
+}
+
+function LinkLookup({
+  initialReference,
+  onOpen,
+}: {
+  initialReference: string;
+  onOpen: (reference: string, token: string) => void;
+}) {
+  const [reference, setReference] = useState(initialReference);
   const [token, setToken] = useState("");
   const [error, setError] = useState<string | null>(null);
 
@@ -368,28 +496,20 @@ function LookupForm({
       setError("Enter the booking reference and the manage code from your link.");
       return;
     }
-    saveManagementToken(parsed.reference, parsed.token);
     setError(null);
-    if (onFound) onFound(parsed.reference, parsed.token);
-    else navigate(`/manage/${encodeURIComponent(parsed.reference)}`);
+    onOpen(parsed.reference, parsed.token);
   }
 
   return (
-    <form
-      noValidate
-      onSubmit={onSubmit}
-      className="mt-6 grid gap-4 rounded-card border border-border bg-surface p-5"
-    >
-      <div>
-        <h1 className="text-2xl font-semibold">Manage a booking</h1>
-        <p className="mt-2 text-sm text-muted">
-          Paste the manage link, or enter the reference and the code from the end of that link.
-        </p>
-      </div>
-      <label className="text-sm font-semibold" htmlFor="manage-reference">
+    <form noValidate onSubmit={onSubmit} className="mt-4 grid gap-4">
+      <h2 className="text-lg font-semibold">Use a saved link</h2>
+      <p className="text-sm text-muted">
+        Paste the manage link, or enter the reference and the code from the end of that link.
+      </p>
+      <label className="text-sm font-semibold" htmlFor="manage-link-reference">
         Booking reference or link
         <input
-          id="manage-reference"
+          id="manage-link-reference"
           name="reference"
           autoComplete="off"
           value={reference}
@@ -416,7 +536,7 @@ function LookupForm({
       )}
       <button
         type="submit"
-        className="inline-flex min-h-11 items-center justify-center rounded-full bg-accent px-5 font-semibold text-accent-foreground hover:opacity-90"
+        className="inline-flex min-h-11 items-center justify-center rounded-full border border-border px-5 font-semibold hover:border-accent"
       >
         Find booking
       </button>

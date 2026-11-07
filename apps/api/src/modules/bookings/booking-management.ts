@@ -1,4 +1,4 @@
-import type { AvailabilityDto, BookingDto } from "@nailsbychao/types";
+import type { AvailabilityDto, BookingClosedDatesDto, BookingDto } from "@nailsbychao/types";
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { STUDIO } from "../../config/studio";
 import type { Db } from "../../db/client";
@@ -12,7 +12,15 @@ import {
   getTimeOff,
   getWorkingPeriods,
 } from "../availability/availability.repository";
-import { sha256Hex, toBookingDto, uniqueConstraintTarget } from "./bookings.repository";
+import { readStaffClosedDates } from "../availability/closed-days";
+import { formatStudioWhen, notificationInsertIfChanged } from "../notifications/notifications";
+import { normalizeKenyanPhone } from "./booking-request";
+import {
+  issueRecoveryToken,
+  sha256Hex,
+  toBookingDto,
+  uniqueConstraintTarget,
+} from "./bookings.repository";
 
 const LINK_INVALID = "That booking link is not valid.";
 const WINDOW_CLOSED =
@@ -23,6 +31,8 @@ const SLOT_TAKEN = "That time was just taken. Please choose another.";
 const JUST_UPDATED = "This booking was just updated. Reload and try again.";
 
 const DUMMY_HASH = "0".repeat(64);
+const DUMMY_PHONE = "+254000000000";
+const LOOKUP_FAILED = "Those details don't match a booking.";
 
 /** Same answer for a missing booking, a missing token, and a wrong token. */
 export async function requireBooking(
@@ -37,11 +47,34 @@ export async function requireBooking(
       .from(appointments)
       .where(eq(appointments.bookingReference, reference))
       .get()) ?? null;
-  const stored = row?.managementTokenHash ?? DUMMY_HASH;
-  if (!row || !hashesMatch(stored, presentedHash)) {
+  const managementOk = hashesMatch(row?.managementTokenHash ?? DUMMY_HASH, presentedHash);
+  const recoveryOk = hashesMatch(row?.recoveryTokenHash ?? DUMMY_HASH, presentedHash);
+  if (!row || !(managementOk || recoveryOk)) {
     throw new AppError(401, "unauthenticated", LINK_INVALID);
   }
   return row;
+}
+
+/**
+ * Opens a booking from the reference and phone. A missing booking and a wrong phone
+ * return the same 401. The device token is new; the original manage link still works.
+ */
+export async function lookupBooking(db: Db, reference: string, phone: string): Promise<BookingDto> {
+  const normalized = normalizeKenyanPhone(phone);
+  if (!normalized) {
+    throw new AppError(400, "validation_error", "Use a Kenyan phone number, like 0712 345 678.");
+  }
+  const row =
+    (await db
+      .select()
+      .from(appointments)
+      .where(eq(appointments.bookingReference, reference.trim().toUpperCase()))
+      .get()) ?? null;
+  const phoneOk = hashesMatch(row?.customerPhone ?? DUMMY_PHONE, normalized);
+  if (!row || !phoneOk) {
+    throw new AppError(401, "unauthenticated", LOOKUP_FAILED);
+  }
+  return toBookingDto(row, await issueRecoveryToken(db, row.id));
 }
 
 export function getCustomerBooking(row: AppointmentRow): BookingDto {
@@ -74,6 +107,18 @@ export async function bookingAvailability(
   };
 }
 
+/** Days this booking cannot move to. Uses the booking's own staff member. */
+export async function bookingClosedDates(
+  db: Db,
+  row: AppointmentRow,
+  from: string,
+  to: string,
+  now = new Date(),
+): Promise<BookingClosedDatesDto> {
+  assertCustomerCanChange(row, now, "reschedule");
+  return readStaffClosedDates(db, row.staffId, from, to, now);
+}
+
 export async function cancelBooking(
   db: Db,
   row: AppointmentRow,
@@ -93,6 +138,13 @@ export async function cancelBooking(
         ),
       )
       .returning({ id: appointments.id }),
+    notificationInsertIfChanged(db, {
+      audience: "admin",
+      appointmentId: row.id,
+      kind: "booking_cancelled",
+      title: "Booking cancelled",
+      body: `${row.customerName} cancelled ${row.bookingReference}.`,
+    }),
     db
       .delete(appointmentSlotReservations)
       .where(
@@ -158,6 +210,20 @@ export async function rescheduleBooking(
           ),
         )
         .returning({ id: appointments.id }),
+      notificationInsertIfChanged(db, {
+        audience: "admin",
+        appointmentId: row.id,
+        kind: "booking_rescheduled",
+        title: "Booking moved",
+        body: `${row.customerName} moved ${row.bookingReference} to ${formatStudioWhen(startAt)} (Nairobi time).`,
+      }),
+      notificationInsertIfChanged(db, {
+        audience: "customer",
+        appointmentId: row.id,
+        kind: "booking_rescheduled",
+        title: "Booking moved",
+        body: `Your appointment was moved to ${formatStudioWhen(startAt)} (Nairobi time).`,
+      }),
       db.delete(appointmentSlotReservations).where(
         and(
           eq(appointmentSlotReservations.appointmentId, row.id),

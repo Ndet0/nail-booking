@@ -1,12 +1,14 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { Navigate, NavLink, Outlet } from "react-router";
 import { ThemeToggle } from "@/components/ThemeToggle";
-import { signOut, useAdminSession } from "@/features/admin/api";
+import { signOut, useAdminNotifications, useAdminSession } from "@/features/admin/api";
 import { secondaryButtonClass } from "@/features/admin/ui";
 import { ApiError } from "@/lib/api";
 
 const LINKS = [
   { to: "/admin", label: "Bookings", end: true },
+  { to: "/admin/calendar", label: "Calendar", end: false },
+  { to: "/admin/notifications", label: "Notifications", end: false },
   { to: "/admin/services", label: "Services", end: false },
   { to: "/admin/staff", label: "Staff", end: false },
   { to: "/admin/gallery", label: "Gallery", end: false },
@@ -14,6 +16,8 @@ const LINKS = [
 
 export function AdminLayout() {
   const session = useAdminSession();
+  const notifications = useAdminNotifications(Boolean(session.data));
+  const unread = notifications.data?.unreadCount ?? 0;
   const queryClient = useQueryClient();
 
   if (session.isPending) {
@@ -69,6 +73,7 @@ export function AdminLayout() {
               }
             >
               {link.label}
+              {link.to === "/admin/notifications" && unread > 0 ? ` (${unread})` : ""}
             </NavLink>
           ))}
         </nav>

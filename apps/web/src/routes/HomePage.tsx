@@ -1,7 +1,7 @@
 import { Link } from "react-router";
 import heroImage from "@/assets/hero-nails.jpeg";
 import { ApiStatus } from "@/components/ApiStatus";
-import { ThemeToggle } from "@/components/ThemeToggle";
+import { SiteHeader } from "@/components/SiteHeader";
 import { GallerySection } from "@/features/gallery/GallerySection";
 import { ServiceList } from "@/features/services/ServiceList";
 
@@ -14,7 +14,7 @@ const EMAIL = "florakiteria@gmail.com";
 export function HomePage() {
   return (
     <div className="flex min-h-dvh min-w-0 flex-col">
-      <header className="relative isolate flex min-h-[22rem] flex-col overflow-hidden sm:min-h-[80svh]">
+      <div className="relative isolate flex min-h-[22rem] flex-col overflow-hidden sm:min-h-[80svh]">
         {/* Decorative: the wordmark and tagline carry the meaning. */}
         <img
           src={heroImage}
@@ -30,9 +30,7 @@ export function HomePage() {
           className="absolute inset-0 -z-10 bg-linear-to-b from-black/55 via-black/30 via-70% to-background"
         />
 
-        <div className="page-x relative z-10 flex justify-end pt-[max(0.75rem,env(safe-area-inset-top))]">
-          <ThemeToggle />
-        </div>
+        <SiteHeader variant="overlay" />
 
         <div className="page-x relative z-10 flex flex-1 flex-col items-center justify-center py-8 text-center sm:py-16">
           <div
@@ -64,7 +62,7 @@ export function HomePage() {
             </a>
           </div>
         </div>
-      </header>
+      </div>
 
       <div className="page-x mx-auto flex w-full min-w-0 max-w-2xl flex-1 flex-col pb-16">
         <main id="services" className="mt-4 mb-12 scroll-mt-8">

@@ -1,10 +1,12 @@
 import type {
   AdminBookingDto,
+  AdminCalendarDto,
   AdminGalleryImageDto,
   AdminProfileDto,
   AdminServiceDto,
   AdminStaffDto,
   BookingStatus,
+  NotificationListDto,
   Page,
   TimeOffDto,
   WorkingHoursDto,
@@ -78,6 +80,7 @@ export function useUpdateBookingStatus(id: string) {
     onSuccess: (booking) => {
       queryClient.setQueryData(["admin-booking", id], booking);
       void queryClient.invalidateQueries({ queryKey: ["admin-bookings"] });
+      void queryClient.invalidateQueries({ queryKey: ["admin-notifications"] });
     },
   });
 }
@@ -107,6 +110,17 @@ export function useStaffHours(staffId: string) {
   });
 }
 
+export function useAdminCalendar(staffId: string, from: string, to: string) {
+  return useQuery({
+    queryKey: ["admin-calendar", staffId, from, to],
+    enabled: staffId.length > 0 && from <= to,
+    queryFn: () =>
+      apiFetch<AdminCalendarDto>(`/admin/calendar?${new URLSearchParams({ staffId, from, to })}`, {
+        auth: true,
+      }),
+  });
+}
+
 export function useTimeOff(staffId: string) {
   return useQuery({
     queryKey: ["admin-time-off", staffId],
@@ -116,6 +130,27 @@ export function useTimeOff(staffId: string) {
         `/admin/time-off?staffId=${encodeURIComponent(staffId)}&limit=100`,
         { auth: true },
       ),
+  });
+}
+
+export function useAdminNotifications(enabled = true) {
+  return useQuery({
+    queryKey: ["admin-notifications"],
+    enabled,
+    staleTime: 0,
+    refetchOnWindowFocus: true,
+    queryFn: () => apiFetch<NotificationListDto>("/admin/notifications", { auth: true }),
+  });
+}
+
+export function markAllAdminNotificationsRead() {
+  return apiFetch<NotificationListDto>("/admin/notifications/read", { auth: true, method: "POST" });
+}
+
+export function markAdminNotificationRead(id: string) {
+  return apiFetch<NotificationListDto>(`/admin/notifications/${encodeURIComponent(id)}/read`, {
+    auth: true,
+    method: "POST",
   });
 }
 

@@ -3,8 +3,10 @@ import type {
   ApiErrorBody,
   ApiSuccess,
   AvailabilityDto,
+  BookingClosedDatesDto,
   BookingDto,
   CreateBookingInput,
+  NotificationListDto,
 } from "@nailsbychao/types";
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { app } from "../src/app";
@@ -93,6 +95,8 @@ beforeAll(async () => {
 
 beforeEach(async () => {
   await env.DB.batch([
+    env.DB.prepare("DELETE FROM notifications"),
+    env.DB.prepare("DELETE FROM booking_lookup_attempts"),
     env.DB.prepare("DELETE FROM appointment_slot_reservations"),
     env.DB.prepare("DELETE FROM appointments"),
   ]);
@@ -649,5 +653,241 @@ describe("customer booking management", () => {
       location: "studio",
       timezone: "Africa/Nairobi",
     });
+  });
+
+  it("hides a closed day on the move calendar without changing the booking", async () => {
+    const booking = await booked(at("11:00"));
+    const sunday = addDays(MONDAY, 6);
+    const open = await callBooking<BookingClosedDatesDto>(
+      bookingPath(booking.bookingReference, `/closed-dates?from=${MONDAY}&to=${sunday}`),
+      booking.managementToken ?? "",
+    );
+    expect(open.status).toBe(200);
+    if (!("data" in open.json)) throw new Error("expected closed dates");
+    expect(open.json.data.dates).toContain(sunday);
+    expect(open.json.data.dates).not.toContain(MONDAY);
+
+    await env.DB.prepare(
+      `INSERT INTO staff_time_off (id, staff_id, start_at, end_at)
+       VALUES ('bk_close', 'bk_staff', ?, ?)`,
+    )
+      .bind(at("00:00"), at("00:00", addDays(MONDAY, 1)))
+      .run();
+    try {
+      const closed = await callBooking<BookingClosedDatesDto>(
+        bookingPath(booking.bookingReference, `/closed-dates?from=${MONDAY}&to=${sunday}`),
+        booking.managementToken ?? "",
+      );
+      if (!("data" in closed.json)) throw new Error("expected closed dates");
+      expect(closed.json.data.dates).toContain(MONDAY);
+      const stored = await env.DB.prepare("SELECT status FROM appointments WHERE id = ?")
+        .bind(booking.id)
+        .first<{ status: string }>();
+      expect(stored?.status).toBe("pending");
+    } finally {
+      await env.DB.prepare("DELETE FROM staff_time_off WHERE id = 'bk_close'").run();
+    }
+  });
+});
+
+async function postLookup(body: unknown, ip: string) {
+  const res = await app.request(
+    "/api/v1/bookings/lookup",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "CF-Connecting-IP": ip },
+      body: JSON.stringify(body),
+    },
+    env,
+  );
+  const json = (await res.json()) as ApiSuccess<BookingDto> | ApiErrorBody;
+  return { status: res.status, json };
+}
+
+async function notices(appointmentId: string) {
+  const stored = await env.DB.prepare(
+    "SELECT audience, kind, title FROM notifications WHERE appointment_id = ? ORDER BY audience, kind",
+  )
+    .bind(appointmentId)
+    .all<{ audience: string; kind: string; title: string }>();
+  return stored.results;
+}
+
+describe("POST /bookings/lookup", () => {
+  it("opens the booking from the reference and phone without replacing the original link", async () => {
+    const booking = await booked();
+    const looked = await postLookup(
+      { bookingReference: booking.bookingReference.toLowerCase(), customerPhone: "0712 345 678" },
+      "203.0.113.10",
+    );
+    expect(looked.status).toBe(200);
+    if (!("data" in looked.json) || !looked.json.data.managementToken) {
+      throw new Error("expected a device token");
+    }
+    expect(looked.json.data.managementToken).not.toBe(booking.managementToken);
+    expect(looked.json.data.bookingReference).toBe(booking.bookingReference);
+
+    const stored = await env.DB.prepare(
+      "SELECT management_token_hash, recovery_token_hash FROM appointments WHERE id = ?",
+    )
+      .bind(booking.id)
+      .first<{ management_token_hash: string; recovery_token_hash: string | null }>();
+    expect(stored?.management_token_hash).toBe(await sha256Hex(booking.managementToken ?? ""));
+    expect(stored?.recovery_token_hash).toBe(await sha256Hex(looked.json.data.managementToken));
+
+    const original = await callBooking(
+      bookingPath(booking.bookingReference),
+      booking.managementToken ?? "",
+    );
+    const recovered = await callBooking(
+      bookingPath(booking.bookingReference),
+      looked.json.data.managementToken,
+    );
+    expect(original.status).toBe(200);
+    expect(recovered.status).toBe(200);
+  });
+
+  it("returns the same error for a wrong phone and a missing reference", async () => {
+    const booking = await booked();
+    const wrong = await postLookup(
+      { bookingReference: booking.bookingReference, customerPhone: "0799 999 999" },
+      "203.0.113.11",
+    );
+    const missing = await postLookup(
+      { bookingReference: "NBC-ZZZZ-ZZZZ", customerPhone: "0712 345 678" },
+      "203.0.113.12",
+    );
+    expect(wrong.status).toBe(401);
+    expect(missing.status).toBe(401);
+    expect(wrong.json).toEqual(missing.json);
+  });
+
+  it("ignores expired attempts and blocks the ninth recent lookup", async () => {
+    const booking = await booked();
+    const ip = "203.0.113.50";
+    const ipHash = await sha256Hex(ip);
+    const old = new Date(Date.now() - 16 * 60 * 1000).toISOString();
+    await env.DB.batch(
+      Array.from({ length: 8 }, (_, index) =>
+        env.DB.prepare(
+          "INSERT INTO booking_lookup_attempts (id, ip_hash, created_at) VALUES (?, ?, ?)",
+        ).bind(`old_${index}`, ipHash, old),
+      ),
+    );
+
+    const first = await postLookup(
+      { bookingReference: "NBC-ZZZZ-ZZZZ", customerPhone: "0712 345 678" },
+      ip,
+    );
+    expect(first.status).toBe(401);
+    for (let attempt = 0; attempt < 7; attempt++) {
+      expect(
+        (await postLookup({ bookingReference: "NBC-ZZZZ-ZZZZ", customerPhone: "0712 345 678" }, ip))
+          .status,
+      ).toBe(401);
+    }
+    const blocked = await postLookup(
+      { bookingReference: booking.bookingReference, customerPhone: "0712 345 678" },
+      ip,
+    );
+    expect(blocked.status).toBe(429);
+    if (!("error" in blocked.json)) throw new Error("expected an error");
+    expect(blocked.json.error.code).toBe("rate_limited");
+    const stored = await env.DB.prepare("SELECT recovery_token_hash FROM appointments WHERE id = ?")
+      .bind(booking.id)
+      .first<{ recovery_token_hash: string | null }>();
+    expect(stored?.recovery_token_hash).toBeNull();
+  });
+});
+
+describe("booking notifications", () => {
+  it("tells the admin when a booking is created", async () => {
+    const booking = await booked();
+    expect(await notices(booking.id)).toEqual([
+      { audience: "admin", kind: "booking_created", title: "New booking" },
+    ]);
+  });
+
+  it("tells the admin when the customer cancels", async () => {
+    const booking = await booked();
+    const cancelled = await callBooking(
+      bookingPath(booking.bookingReference, "/cancel"),
+      booking.managementToken ?? "",
+      { method: "POST" },
+    );
+    expect(cancelled.status).toBe(200);
+    expect(await notices(booking.id)).toEqual([
+      { audience: "admin", kind: "booking_cancelled", title: "Booking cancelled" },
+      { audience: "admin", kind: "booking_created", title: "New booking" },
+    ]);
+  });
+
+  it("tells both sides when the customer moves the booking", async () => {
+    const booking = await booked();
+    const moved = await callBooking(
+      bookingPath(booking.bookingReference, "/reschedule"),
+      booking.managementToken ?? "",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ startAt: at("10:15") }),
+      },
+    );
+    expect(moved.status).toBe(200);
+    expect(await notices(booking.id)).toEqual([
+      { audience: "admin", kind: "booking_created", title: "New booking" },
+      { audience: "admin", kind: "booking_rescheduled", title: "Booking moved" },
+      { audience: "customer", kind: "booking_rescheduled", title: "Booking moved" },
+    ]);
+  });
+
+  it("does not record a move that was rolled back", async () => {
+    const first = await booked(at("10:00"));
+    const second = await booked(at("14:00"), "Beatrice");
+    const moved = await callBooking(
+      bookingPath(first.bookingReference, "/reschedule"),
+      first.managementToken ?? "",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ startAt: second.startAt }),
+      },
+    );
+    expect(moved.status).toBe(409);
+    expect(await notices(first.id)).toEqual([
+      { audience: "admin", kind: "booking_created", title: "New booking" },
+    ]);
+  });
+
+  it("shows customer updates only with that booking's token", async () => {
+    const booking = await booked();
+    const other = await booked(at("14:00"), "Beatrice");
+    const moved = await callBooking(
+      bookingPath(booking.bookingReference, "/reschedule"),
+      booking.managementToken ?? "",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ startAt: at("10:15") }),
+      },
+    );
+    expect(moved.status).toBe(200);
+
+    const anonymous = await callBooking(bookingPath(booking.bookingReference, "/notifications"));
+    expect(anonymous.status).toBe(401);
+    const foreign = await callBooking(
+      bookingPath(booking.bookingReference, "/notifications"),
+      other.managementToken ?? "",
+    );
+    expect(foreign.status).toBe(401);
+
+    const found = await callBooking<NotificationListDto>(
+      bookingPath(booking.bookingReference, "/notifications"),
+      booking.managementToken ?? "",
+    );
+    expect(found.status).toBe(200);
+    if (!("data" in found.json)) throw new Error("expected notifications");
+    expect(found.json.data.items.map((item) => item.audience)).toEqual(["customer"]);
+    expect(found.json.data.unreadCount).toBe(1);
   });
 });

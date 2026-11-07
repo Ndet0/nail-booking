@@ -1,9 +1,11 @@
 import { createBrowserRouter } from "react-router";
 import { AdminBookingPage } from "@/routes/AdminBookingPage";
 import { AdminBookingsPage } from "@/routes/AdminBookingsPage";
+import { AdminCalendarPage } from "@/routes/AdminCalendarPage";
 import { AdminGalleryPage } from "@/routes/AdminGalleryPage";
 import { AdminLayout } from "@/routes/AdminLayout";
 import { AdminLoginPage } from "@/routes/AdminLoginPage";
+import { AdminNotificationsPage } from "@/routes/AdminNotificationsPage";
 import { AdminServicesPage } from "@/routes/AdminServicesPage";
 import { AdminStaffPage } from "@/routes/AdminStaffPage";
 import { BookingPage } from "@/routes/BookingPage";
@@ -36,6 +38,8 @@ export const router = createBrowserRouter([
     element: <AdminLayout />,
     children: [
       { index: true, element: <AdminBookingsPage /> },
+      { path: "calendar", element: <AdminCalendarPage /> },
+      { path: "notifications", element: <AdminNotificationsPage /> },
       { path: "bookings/:id", element: <AdminBookingPage /> },
       { path: "services", element: <AdminServicesPage /> },
       { path: "staff", element: <AdminStaffPage /> },

@@ -1,4 +1,4 @@
-import { and, eq, gt, gte, lt, ne } from "drizzle-orm";
+import { and, eq, gt, gte, inArray, lt, ne } from "drizzle-orm";
 import type { Db } from "../../db/client";
 import {
   appointmentSlotReservations,
@@ -8,7 +8,21 @@ import {
   staffWorkingHours,
 } from "../../db/schema";
 import { weekdayOf } from "../../utils/studio-time";
-import { type Interval, periodsForDate, type WorkingPeriod } from "./availability.engine";
+import {
+  type Interval,
+  periodsForDate,
+  type WorkingHoursRule,
+  type WorkingPeriod,
+} from "./availability.engine";
+
+export type StaffWorkingRule = WorkingHoursRule & { staffId: string };
+
+export type TimeOffSpan = {
+  id: string;
+  staffId: string;
+  start: number;
+  end: number;
+};
 
 export async function listEligibleStaffIds(db: Db, serviceId: string): Promise<string[]> {
   const rows = await db
@@ -74,4 +88,54 @@ export async function getReservedSlots(
       ),
     );
   return new Set(rows.map((row) => row.slotStartAt));
+}
+
+export async function listWorkingHourRules(
+  db: Db,
+  staffIds: readonly string[],
+): Promise<StaffWorkingRule[]> {
+  if (staffIds.length === 0) return [];
+  return db
+    .select({
+      staffId: staffWorkingHours.staffId,
+      weekday: staffWorkingHours.weekday,
+      startTime: staffWorkingHours.startTime,
+      endTime: staffWorkingHours.endTime,
+      effectiveFrom: staffWorkingHours.effectiveFrom,
+      effectiveUntil: staffWorkingHours.effectiveUntil,
+      isActive: staffWorkingHours.isActive,
+    })
+    .from(staffWorkingHours)
+    .where(inArray(staffWorkingHours.staffId, [...staffIds]));
+}
+
+/** Time off overlapping [from, to) for any of the staff members. */
+export async function listTimeOffSpans(
+  db: Db,
+  staffIds: readonly string[],
+  from: Date,
+  to: Date,
+): Promise<TimeOffSpan[]> {
+  if (staffIds.length === 0) return [];
+  const rows = await db
+    .select({
+      id: staffTimeOff.id,
+      staffId: staffTimeOff.staffId,
+      startAt: staffTimeOff.startAt,
+      endAt: staffTimeOff.endAt,
+    })
+    .from(staffTimeOff)
+    .where(
+      and(
+        inArray(staffTimeOff.staffId, [...staffIds]),
+        lt(staffTimeOff.startAt, to.toISOString()),
+        gt(staffTimeOff.endAt, from.toISOString()),
+      ),
+    );
+  return rows.map((row) => ({
+    id: row.id,
+    staffId: row.staffId,
+    start: Date.parse(row.startAt),
+    end: Date.parse(row.endAt),
+  }));
 }

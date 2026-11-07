@@ -36,6 +36,13 @@
       "when": 1793956469609,
       "tag": "0004_customer_reschedule",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1793972352402,
+      "tag": "0005_booking_recovery_notifications",
+      "breakpoints": true
     }
   ]
 }

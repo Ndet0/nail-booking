@@ -79,8 +79,8 @@ export type BookingDto = {
   id: string;
   bookingReference: string;
   /**
-   * Raw management token. Present only on the response that inserted the row.
-   * A retry of the same request returns null; only the SHA-256 is stored.
+   * Raw management token. Present when a booking is created, and again when phone
+   * lookup issues a device token. A retried create returns null. Only hashes are stored.
    */
   managementToken: string | null;
   status: BookingStatus;
@@ -170,6 +170,85 @@ export type TimeOffDto = {
   endAt: string;
   reason: string | null;
   createdAt: string;
+};
+
+/** `open` can be booked. `closed` is a one-off day off. `weekly_closed` has no weekly hours. */
+export type CalendarDayState = "open" | "closed" | "weekly_closed";
+
+export type CalendarBlockDto = {
+  id: string;
+  startAt: string;
+  endAt: string;
+  reason: string | null;
+};
+
+/** A pending or confirmed appointment, using its service start and end. */
+export type CalendarBookingDto = {
+  startAt: string;
+  endAt: string;
+};
+
+export type CalendarDayDto = {
+  /** `YYYY-MM-DD` in the studio timezone. */
+  date: string;
+  state: CalendarDayState;
+  /** Pending and confirmed bookings that stay on this day when it is closed. */
+  bookingCount: number;
+  /** Time off that overlaps this local day. */
+  blocks: CalendarBlockDto[];
+  /** Pending and confirmed bookings whose service starts on this day. */
+  bookings: CalendarBookingDto[];
+};
+
+export type AdminCalendarDto = {
+  staffId: string;
+  timezone: string;
+  firstBookableDate: string;
+  lastBookableDate: string;
+  days: CalendarDayDto[];
+};
+
+export type ClosedDatesDto = {
+  serviceId: string;
+  timezone: string;
+  from: string;
+  to: string;
+  /** Dates in the range that cannot be booked, including regular days off. */
+  dates: string[];
+};
+
+export type BookingClosedDatesDto = {
+  timezone: string;
+  from: string;
+  to: string;
+  dates: string[];
+};
+
+export type NotificationAudience = "admin" | "customer";
+
+export type NotificationKind =
+  | "booking_created"
+  | "booking_cancelled"
+  | "booking_rescheduled"
+  | "booking_confirmed"
+  | "booking_completed"
+  | "booking_no_show";
+
+export type NotificationDto = {
+  id: string;
+  audience: NotificationAudience;
+  appointmentId: string;
+  bookingReference: string;
+  kind: NotificationKind;
+  title: string;
+  body: string;
+  readAt: string | null;
+  createdAt: string;
+};
+
+export type NotificationListDto = {
+  items: NotificationDto[];
+  unreadCount: number;
 };
 
 export type GalleryImageDto = {

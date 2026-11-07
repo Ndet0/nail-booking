@@ -1,4 +1,4 @@
-import type { ApiSuccess, AvailabilityDto } from "@nailsbychao/types";
+import type { ApiSuccess, AvailabilityDto, ClosedDatesDto } from "@nailsbychao/types";
 import { Hono } from "hono";
 import { z } from "zod";
 import { STUDIO } from "../../config/studio";
@@ -16,17 +16,29 @@ import {
   getWorkingPeriods,
   listEligibleStaffIds,
 } from "./availability.repository";
+import { readServiceClosedDates } from "./closed-days";
+
+const calendarDate = z.string().refine(isCalendarDate, "Use a real date in YYYY-MM-DD format.");
 
 const availabilityQuery = z.object({
   serviceId: z.string().trim().min(1).max(64),
-  date: z.string().refine(isCalendarDate, "Use a real date in YYYY-MM-DD format."),
+  date: calendarDate,
   location: z.enum(appointmentLocations).default("studio"),
 });
 
-export const availabilityRoutes = new Hono<AppEnv>().get(
-  "/",
-  validate("query", availabilityQuery),
-  async (c) => {
+const closedDatesQuery = z.object({
+  serviceId: z.string().trim().min(1).max(64),
+  from: calendarDate,
+  to: calendarDate,
+});
+
+export const availabilityRoutes = new Hono<AppEnv>()
+  .get("/closed-dates", validate("query", closedDatesQuery), async (c) => {
+    const { serviceId, from, to } = c.req.valid("query");
+    const data = await readServiceClosedDates(createDb(c.env.DB), serviceId, from, to);
+    return c.json({ data } satisfies ApiSuccess<ClosedDatesDto>);
+  })
+  .get("/", validate("query", availabilityQuery), async (c) => {
     const { serviceId, date, location } = c.req.valid("query");
     const now = new Date();
 
@@ -77,5 +89,4 @@ export const availabilityRoutes = new Hono<AppEnv>().get(
       slots: unionSlots(perStaff),
     };
     return c.json({ data } satisfies ApiSuccess<AvailabilityDto>);
-  },
-);
+  });

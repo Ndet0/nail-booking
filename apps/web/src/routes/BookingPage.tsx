@@ -1,8 +1,8 @@
 import type { AppointmentLocation, BookingDto, ServiceDto } from "@nailsbychao/types";
 import { useEffect, useRef, useState } from "react";
-import { Link, useParams, useSearchParams } from "react-router";
-import { ThemeToggle } from "@/components/ThemeToggle";
-import { useAvailability } from "@/features/booking/api";
+import { useParams, useSearchParams } from "react-router";
+import { SiteHeader } from "@/components/SiteHeader";
+import { useAvailability, useClosedDates } from "@/features/booking/api";
 import { BookingConfirmation } from "@/features/booking/BookingConfirmation";
 import { type BookingDetails, BookingForm } from "@/features/booking/BookingForm";
 import { DateCalendar } from "@/features/booking/DateCalendar";
@@ -11,7 +11,7 @@ import { loadBooking, saveBooking } from "@/features/booking/saved-booking";
 import { TimeSlots } from "@/features/booking/TimeSlots";
 import { useService } from "@/features/services/api";
 import { ApiError } from "@/lib/api";
-import { addDays, studioToday } from "@/lib/datetime";
+import { addDays, firstOpenDate, studioToday } from "@/lib/datetime";
 import { formatDuration, formatPrice } from "@/lib/format";
 
 /** Window length until the API reports the real booking window. */
@@ -46,31 +46,24 @@ export function BookingPage() {
   }
 
   return (
-    <div className="page-x mx-auto w-full min-w-0 max-w-2xl py-8">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <Link
-          to="/"
-          className="inline-flex min-h-11 min-w-0 items-center text-sm text-muted hover:text-accent"
-        >
-          ← All services
-        </Link>
-        <ThemeToggle />
+    <div className="flex min-h-dvh min-w-0 flex-col">
+      <SiteHeader />
+      <div className="page-x mx-auto w-full min-w-0 max-w-2xl flex-1 py-8">
+        {service.isPending ? (
+          <div className="mt-6 h-28 animate-pulse rounded-card border border-border bg-surface" />
+        ) : service.isError ? (
+          <ServiceUnavailable error={service.error} onRetry={() => service.refetch()} />
+        ) : (
+          <>
+            <ServiceHeader service={service.data} />
+            {booking ? (
+              <BookingConfirmation booking={booking} />
+            ) : (
+              <SlotPicker service={service.data} onBooked={handleBooked} />
+            )}
+          </>
+        )}
       </div>
-
-      {service.isPending ? (
-        <div className="mt-6 h-28 animate-pulse rounded-card border border-border bg-surface" />
-      ) : service.isError ? (
-        <ServiceUnavailable error={service.error} onRetry={() => service.refetch()} />
-      ) : (
-        <>
-          <ServiceHeader service={service.data} />
-          {booking ? (
-            <BookingConfirmation booking={booking} />
-          ) : (
-            <SlotPicker service={service.data} onBooked={handleBooked} />
-          )}
-        </>
-      )}
     </div>
   );
 }
@@ -130,13 +123,23 @@ function SlotPicker({
   const progressRef = useRef<HTMLParagraphElement>(null);
   const timeRef = useRef<HTMLElement>(null);
   const availability = useAvailability(service.id, date, location);
-
   const lastDate = availability.data?.lastBookableDate ?? addDays(today, INITIAL_WINDOW_DAYS - 1);
+  const closedDates = useClosedDates(service.id, today, lastDate);
   const isLoadingSlots = availability.isPending || availability.isPlaceholderData;
 
   useEffect(() => {
     if (slotTaken) timeRef.current?.scrollIntoView({ block: "nearest" });
   }, [slotTaken]);
+
+  useEffect(() => {
+    const dates = closedDates.data?.dates;
+    if (!dates) return;
+    const next = firstOpenDate(date, today, lastDate, dates);
+    if (next === date) return;
+    setDate(next);
+    setStartAt(null);
+    setSlotTaken(false);
+  }, [closedDates.data, date, today, lastDate]);
 
   useEffect(() => {
     if (step === 1) return;
@@ -188,6 +191,7 @@ function SlotPicker({
               firstDate={today}
               lastDate={lastDate}
               selected={date}
+              closedDates={closedDates.data?.dates}
               onSelect={chooseDate}
             />
           </section>

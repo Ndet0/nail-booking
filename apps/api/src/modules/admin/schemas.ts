@@ -107,6 +107,22 @@ export const hoursBody = z.object({
   hours: z.array(hoursItem).max(42),
 });
 
+export const calendarQuery = z.object({
+  staffId: z.string().trim().min(1).max(80),
+  from: calendarDate,
+  to: calendarDate,
+});
+
+export const calendarClosureBody = z.object({
+  staffId: z.string().trim().min(1).max(80),
+  date: calendarDate,
+});
+
+export const calendarClosureQuery = z.object({
+  staffId: z.string().trim().min(1).max(80),
+  date: calendarDate,
+});
+
 export const timeOffListQuery = pageQuery.extend({
   staffId: z.string().trim().min(1).max(80).optional(),
   from: calendarDate.optional(),

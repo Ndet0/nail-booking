@@ -168,6 +168,11 @@ export const appointments = sqliteTable(
     bookingReference: text("booking_reference").notNull().unique(),
     /** SHA-256 of the customer's booking-management token. The reference alone grants no access. */
     managementTokenHash: text("management_token_hash").notNull(),
+    /**
+     * SHA-256 of a device token issued by phone-and-reference lookup.
+     * Null until the customer recovers the booking. The original link hash stays.
+     */
+    recoveryTokenHash: text("recovery_token_hash"),
     /** Client-supplied `Idempotency-Key`; a retried submission returns the original booking. */
     idempotencyKey: text("idempotency_key").unique(),
     customerName: text("customer_name").notNull(),
@@ -200,6 +205,10 @@ export const appointments = sqliteTable(
     index("appointments_start_idx").on(table.startAt),
     check("appointments_reference_present", sql`length(${table.bookingReference}) > 0`),
     check("appointments_token_hash_present", sql`length(${table.managementTokenHash}) > 0`),
+    check(
+      "appointments_recovery_token_hash",
+      sql`${table.recoveryTokenHash} IS NULL OR length(${table.recoveryTokenHash}) = 64`,
+    ),
     check("appointments_customer_name_present", sql`length(${table.customerName}) > 0`),
     check("appointments_customer_phone_present", sql`length(${table.customerPhone}) > 0`),
     check(
@@ -397,6 +406,72 @@ export const auditEvents = sqliteTable(
     check("audit_events_action_present", sql`length(${table.action}) > 0`),
     check("audit_events_entity_type_present", sql`length(${table.entityType}) > 0`),
     check("audit_events_entity_id_present", sql`length(${table.entityId}) > 0`),
+  ],
+);
+
+export const notificationAudiences = ["admin", "customer"] as const;
+export const notificationKinds = [
+  "booking_created",
+  "booking_cancelled",
+  "booking_rescheduled",
+  "booking_confirmed",
+  "booking_completed",
+  "booking_no_show",
+] as const;
+
+/** In-app notices. One admin reads the admin rows. Customer rows belong to one appointment. */
+export const notifications = sqliteTable(
+  "notifications",
+  {
+    id: text("id").primaryKey(),
+    audience: text("audience", { enum: notificationAudiences }).notNull(),
+    appointmentId: text("appointment_id")
+      .notNull()
+      .references(() => appointments.id, { onDelete: "cascade" }),
+    kind: text("kind", { enum: notificationKinds }).notNull(),
+    title: text("title").notNull(),
+    body: text("body").notNull(),
+    readAt: text("read_at"),
+    createdAt: text("created_at").notNull().default(timestamp),
+  },
+  (table) => [
+    index("notifications_audience_created_idx").on(table.audience, table.createdAt),
+    index("notifications_appointment_idx").on(table.appointmentId, table.audience),
+    check("notifications_audience_valid", sql`${table.audience} IN ('admin', 'customer')`),
+    check(
+      "notifications_kind_valid",
+      sql`${table.kind} IN ('booking_created', 'booking_cancelled', 'booking_rescheduled', 'booking_confirmed', 'booking_completed', 'booking_no_show')`,
+    ),
+    check(
+      "notifications_title_present",
+      sql`length(${table.title}) > 0 AND length(${table.title}) <= 200`,
+    ),
+    check(
+      "notifications_body_present",
+      sql`length(${table.body}) > 0 AND length(${table.body}) <= 500`,
+    ),
+    check("notifications_read_at", sql`${table.readAt} IS NULL OR ${utcInstant(table.readAt)}`),
+    check("notifications_created_at", utcInstant(table.createdAt)),
+  ],
+);
+
+export type NotificationRow = typeof notifications.$inferSelect;
+
+/**
+ * Phone-and-reference lookup attempts. The address is stored only as a hash,
+ * and rows older than the limit window are deleted on the next attempt.
+ */
+export const bookingLookupAttempts = sqliteTable(
+  "booking_lookup_attempts",
+  {
+    id: text("id").primaryKey(),
+    ipHash: text("ip_hash").notNull(),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [
+    index("booking_lookup_attempts_ip_created_idx").on(table.ipHash, table.createdAt),
+    check("booking_lookup_attempts_ip_hash", sql`length(${table.ipHash}) = 64`),
+    check("booking_lookup_attempts_created_at", utcInstant(table.createdAt)),
   ],
 );
 
