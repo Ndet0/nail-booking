@@ -7,7 +7,9 @@ import type { AppEnv } from "../../env";
 import { AppError } from "../../utils/errors";
 import { requireAdmin } from "../auth/require-admin";
 import { adminBookingRoutes } from "./bookings.routes";
+import { adminCalendarRoutes } from "./calendar.routes";
 import { adminGalleryRoutes } from "./gallery.routes";
+import { adminNotificationRoutes } from "./notifications.routes";
 import { adminServiceRoutes } from "./services.routes";
 import { adminStaffRoutes, adminTimeOffRoutes } from "./staff.routes";
 
@@ -26,6 +28,8 @@ adminRoutes.get("/me", async (c) => {
   return c.json({ data } satisfies ApiSuccess<AdminProfileDto>);
 });
 adminRoutes.route("/bookings", adminBookingRoutes);
+adminRoutes.route("/calendar", adminCalendarRoutes);
+adminRoutes.route("/notifications", adminNotificationRoutes);
 adminRoutes.route("/services", adminServiceRoutes);
 adminRoutes.route("/staff", adminStaffRoutes);
 adminRoutes.route("/time-off", adminTimeOffRoutes);

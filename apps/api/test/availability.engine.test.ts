@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   bookingWindow,
   type ComputeSlotsInput,
+  closureState,
   computeSlots,
   periodsForDate,
   reservationSlots,
@@ -165,6 +166,36 @@ describe("periodsForDate", () => {
       rule({ startTime: "14:00", effectiveUntil: MONDAY }),
     ];
     expect(periodsForDate(rules, MONDAY).map((p) => p.startTime)).toEqual(["09:00", "14:00"]);
+  });
+});
+
+describe("closureState", () => {
+  const period = { start: Date.parse(at("09:00")), end: Date.parse(at("19:00")) };
+
+  it("treats a day with no hours as closed every week", () => {
+    expect(closureState([], [])).toBe("weekly_closed");
+  });
+
+  it("stays open when time off covers only part of the shift", () => {
+    expect(
+      closureState([period], [{ start: Date.parse(at("13:00")), end: Date.parse(at("16:00")) }]),
+    ).toBe("open");
+  });
+
+  it("closes the day when every working period is covered", () => {
+    const morning = { start: Date.parse(at("09:00")), end: Date.parse(at("12:00")) };
+    const afternoon = { start: Date.parse(at("13:00")), end: Date.parse(at("19:00")) };
+    expect(closureState([morning, afternoon], [morning])).toBe("open");
+    expect(
+      closureState(
+        [period],
+        [
+          { start: period.start, end: Date.parse(at("12:00")) },
+          { start: Date.parse(at("12:00")), end: period.end },
+        ],
+      ),
+    ).toBe("closed");
+    expect(closureState([morning, afternoon], [morning, afternoon])).toBe("closed");
   });
 });
 

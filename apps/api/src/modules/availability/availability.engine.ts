@@ -63,7 +63,7 @@ export function bookingWindow(now: Date) {
 }
 
 /** Working periods that apply on `date`: active, matching weekday, within the effective range. */
-export function periodsForDate(rules: WorkingHoursRule[], date: string): WorkingPeriod[] {
+export function periodsForDate(rules: readonly WorkingHoursRule[], date: string): WorkingPeriod[] {
   const weekday = weekdayOf(date);
   return rules
     .filter(
@@ -124,6 +124,37 @@ export function computeSlots(input: ComputeSlotsInput): AvailabilitySlotDto[] {
     }
   }
   return slots.sort((a, b) => a.startAt.localeCompare(b.startAt));
+}
+
+export type ClosureState = "open" | "closed" | "weekly_closed";
+
+/** True when `covers` together include every instant of `target`. Touching an edge does not count. */
+export function intervalCovered(target: Interval, covers: readonly Interval[]): boolean {
+  if (target.end <= target.start) return true;
+  const pieces = covers
+    .filter((item) => item.start < target.end && item.end > target.start)
+    .map((item) => ({
+      start: Math.max(item.start, target.start),
+      end: Math.min(item.end, target.end),
+    }))
+    .sort((a, b) => a.start - b.start || a.end - b.end);
+
+  let cursor = target.start;
+  for (const piece of pieces) {
+    if (piece.start > cursor) return false;
+    if (piece.end > cursor) cursor = piece.end;
+    if (cursor >= target.end) return true;
+  }
+  return false;
+}
+
+/** A day with no working hours is weekly-closed. Time off must cover every period to close it. */
+export function closureState(
+  periods: readonly Interval[],
+  timeOff: readonly Interval[],
+): ClosureState {
+  if (periods.length === 0) return "weekly_closed";
+  return periods.every((period) => intervalCovered(period, timeOff)) ? "closed" : "open";
 }
 
 /** Merges per-staff results: a time is available if any staff member is free. */

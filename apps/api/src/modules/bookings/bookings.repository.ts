@@ -12,6 +12,7 @@ import {
   getWorkingPeriods,
   listEligibleStaffIds,
 } from "../availability/availability.repository";
+import { notificationInsert } from "../notifications/notifications";
 import { getActiveServiceById } from "../services/services.repository";
 import type { NewBooking } from "./booking-request";
 
@@ -52,6 +53,7 @@ export async function insertAppointmentWithReservations(
   db: Db,
   row: AppointmentInsert,
   slots: readonly string[],
+  extras: readonly object[] = [],
 ): Promise<void> {
   if (slots.length === 0) {
     throw new Error("A booking must reserve at least one slot.");
@@ -85,8 +87,9 @@ export async function insertAppointmentWithReservations(
         appointmentId: row.id,
       }),
     ),
+    ...extras,
   ];
-  await db.batch(statements as [(typeof statements)[number], ...(typeof statements)[number][]]);
+  await db.batch(statements as unknown as Parameters<Db["batch"]>[0]);
 }
 
 export async function createBooking(db: Db, input: NewBooking): Promise<CreateBookingResult> {
@@ -199,17 +202,23 @@ async function assignStaff(
 }
 
 async function writeBooking(db: Db, row: AppointmentInsert, slots: readonly string[]) {
+  const write = (next: AppointmentInsert) =>
+    insertAppointmentWithReservations(db, next, slots, [
+      notificationInsert(db, {
+        audience: "admin",
+        appointmentId: next.id,
+        kind: "booking_created",
+        title: "New booking",
+        body: `${next.customerName} requested ${next.serviceNameSnapshot} (${next.bookingReference}).`,
+      }),
+    ]);
   try {
-    await insertAppointmentWithReservations(db, row, slots);
+    await write(row);
   } catch (error) {
     // Match the SQLite constraint, not the SQL text. The insert lists every column, including
     // booking_reference, so a slot conflict would otherwise look like a reference collision.
     if (!uniqueConstraintTarget(error)?.includes("booking_reference")) throw error;
-    await insertAppointmentWithReservations(
-      db,
-      { ...row, bookingReference: newBookingReference() },
-      slots,
-    );
+    await write({ ...row, bookingReference: newBookingReference() });
   }
 }
 
@@ -285,6 +294,16 @@ function newBookingReference(): string {
 function newManagementToken(): string {
   const bytes = crypto.getRandomValues(new Uint8Array(32));
   return [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+/** Stores a new device-token hash and returns the token once. The original link hash stays. */
+export async function issueRecoveryToken(db: Db, appointmentId: string): Promise<string> {
+  const token = newManagementToken();
+  await db
+    .update(appointments)
+    .set({ recoveryTokenHash: await sha256Hex(token), updatedAt: new Date().toISOString() })
+    .where(eq(appointments.id, appointmentId));
+  return token;
 }
 
 export async function sha256Hex(value: string): Promise<string> {

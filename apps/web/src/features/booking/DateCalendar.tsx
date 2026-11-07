@@ -17,10 +17,12 @@ type Props = {
   firstDate: string;
   lastDate: string;
   selected: string;
+  closedDates?: readonly string[];
   onSelect: (date: string) => void;
 };
 
-export function DateCalendar({ firstDate, lastDate, selected, onSelect }: Props) {
+export function DateCalendar({ firstDate, lastDate, selected, closedDates = [], onSelect }: Props) {
+  const closed = new Set(closedDates);
   const [visibleMonth, setVisibleMonth] = useState(() => monthStart(selected));
   const start = monthStart(visibleMonth);
   const days = datesInMonth(start);
@@ -67,14 +69,26 @@ export function DateCalendar({ firstDate, lastDate, selected, onSelect }: Props)
           {days.map((date) => {
             const inRange = date >= firstDate && date <= lastDate;
             const { day } = dayParts(date);
+            const dayClass =
+              "mx-auto flex aspect-square w-full max-w-11 items-center justify-center text-sm tabular-nums";
             if (!inRange) {
               return (
-                <span
-                  key={date}
-                  className="mx-auto flex aspect-square w-full max-w-11 items-center justify-center text-sm text-muted"
-                >
+                <span key={date} className={cn(dayClass, "text-muted")}>
                   {day}
                 </span>
+              );
+            }
+            if (closed.has(date)) {
+              return (
+                <button
+                  key={date}
+                  type="button"
+                  disabled
+                  aria-label={`${formatDay(date)}, closed`}
+                  className={cn(dayClass, "text-muted line-through")}
+                >
+                  {day}
+                </button>
               );
             }
             const isSelected = date === selected;
@@ -86,7 +100,8 @@ export function DateCalendar({ firstDate, lastDate, selected, onSelect }: Props)
                 aria-label={formatDay(date)}
                 onClick={() => onSelect(date)}
                 className={cn(
-                  "mx-auto flex aspect-square w-full max-w-11 items-center justify-center rounded-full border text-sm font-semibold tabular-nums",
+                  dayClass,
+                  "rounded-full border font-semibold",
                   isSelected
                     ? "border-accent bg-accent text-accent-foreground"
                     : "border-border bg-surface hover:border-accent",

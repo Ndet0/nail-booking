@@ -74,6 +74,21 @@ export function dayParts(date: string) {
   };
 }
 
+/** Prefer `preferred` when it is open. Otherwise the first open date in the range. */
+export function firstOpenDate(
+  preferred: string,
+  firstDate: string,
+  lastDate: string,
+  closed: readonly string[],
+): string {
+  const blocked = new Set(closed);
+  if (preferred >= firstDate && preferred <= lastDate && !blocked.has(preferred)) return preferred;
+  for (let date = firstDate; date <= lastDate; date = addDays(date, 1)) {
+    if (!blocked.has(date)) return date;
+  }
+  return preferred;
+}
+
 /** e.g. "Tue 10 Nov". */
 export function formatDay(date: string): string {
   const { weekday, day, month } = dayParts(date);

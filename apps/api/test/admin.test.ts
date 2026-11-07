@@ -1,9 +1,12 @@
 import { env } from "cloudflare:workers";
 import type {
   AdminBookingDto,
+  AdminCalendarDto,
   ApiErrorBody,
   ApiSuccess,
   AvailabilityDto,
+  CalendarDayDto,
+  NotificationListDto,
   Page,
   ServiceDto,
 } from "@nailsbychao/types";
@@ -51,9 +54,18 @@ const PROTECTED: { method: string; path: string; body?: string }[] = [
   },
   { method: "GET", path: "/api/v1/admin/staff/missing/hours" },
   { method: "PUT", path: "/api/v1/admin/staff/missing/hours", body: JSON.stringify({ hours: [] }) },
+  { method: "GET", path: "/api/v1/admin/calendar?staffId=missing&from=2026-11-09&to=2026-11-09" },
+  { method: "POST", path: "/api/v1/admin/calendar/closures", body: "{}" },
+  {
+    method: "DELETE",
+    path: "/api/v1/admin/calendar/closures?staffId=missing&date=2026-11-09",
+  },
   { method: "GET", path: "/api/v1/admin/time-off" },
   { method: "POST", path: "/api/v1/admin/time-off", body: "{}" },
   { method: "DELETE", path: "/api/v1/admin/time-off/missing" },
+  { method: "GET", path: "/api/v1/admin/notifications" },
+  { method: "POST", path: "/api/v1/admin/notifications/read" },
+  { method: "POST", path: "/api/v1/admin/notifications/missing/read" },
   { method: "GET", path: "/api/v1/admin/gallery" },
   { method: "POST", path: "/api/v1/admin/gallery" },
   { method: "GET", path: "/api/v1/admin/gallery/missing/image" },
@@ -120,6 +132,9 @@ async function signIn(email: string) {
 
 beforeAll(async () => {
   await env.DB.batch([
+    env.DB.prepare(
+      "DELETE FROM notifications WHERE appointment_id IN (SELECT id FROM appointments WHERE staff_id = 'ad_staff')",
+    ),
     env.DB.prepare("DELETE FROM appointment_slot_reservations WHERE staff_id = 'ad_staff'"),
     env.DB.prepare("DELETE FROM appointments WHERE staff_id = 'ad_staff'"),
     env.DB.prepare("DELETE FROM staff_time_off WHERE staff_id = 'ad_staff'"),
@@ -402,6 +417,87 @@ describe("admin studio management", () => {
     expect(held?.n === 0).toBe(final?.status === "cancelled");
   });
 
+  it("tells the customer when an administrator confirms", async () => {
+    const startAt = at("18:00");
+    const id = "apt_admin_notice";
+    await insertAppointmentWithReservations(
+      createDb(env.DB),
+      {
+        id,
+        bookingReference: "ADMNOTE",
+        managementTokenHash: "hash-notice",
+        idempotencyKey: "admin-notice",
+        customerName: "Amina",
+        customerEmail: null,
+        customerPhone: "+254712345678",
+        staffId: "ad_staff",
+        serviceId: "ad_svc",
+        serviceNameSnapshot: "Admin Gel",
+        durationMinutesSnapshot: 60,
+        priceMinorSnapshot: 150000,
+        currency: "KES",
+        startAt,
+        endAt: at("19:00"),
+        location: "studio",
+        address: null,
+        customerNotes: null,
+      },
+      reservationSlots(new Date(startAt), 60, "studio"),
+    );
+
+    const confirmed = await call(
+      `/api/v1/admin/bookings/${id}`,
+      { method: "PATCH", body: JSON.stringify({ status: "confirmed" }) },
+      cookie,
+    );
+    expect(confirmed.status).toBe(200);
+
+    const rows = await env.DB.prepare(
+      "SELECT audience, kind FROM notifications WHERE appointment_id = ? ORDER BY audience",
+    )
+      .bind(id)
+      .all<{ audience: string; kind: string }>();
+    expect(rows.results).toEqual([{ audience: "customer", kind: "booking_confirmed" }]);
+
+    const createdAt = new Date().toISOString();
+    await env.DB.prepare(
+      `INSERT INTO notifications (id, audience, appointment_id, kind, title, body, created_at)
+       VALUES ('ntf_admin_read', 'admin', ?, 'booking_created', 'New booking', 'Amina requested Admin Gel.', ?)`,
+    )
+      .bind(id, createdAt)
+      .run();
+
+    const list = await call("/api/v1/admin/notifications", {}, cookie);
+    expect(list.status).toBe(200);
+    const body = (await list.json()) as ApiSuccess<NotificationListDto>;
+    const item = body.data.items.find((notice) => notice.id === "ntf_admin_read");
+    expect(item?.readAt).toBeNull();
+    expect(body.data.items.some((notice) => notice.audience === "customer")).toBe(false);
+
+    const read = await call(
+      "/api/v1/admin/notifications/ntf_admin_read/read",
+      { method: "POST" },
+      cookie,
+    );
+    expect(read.status).toBe(200);
+    const after = (await read.json()) as ApiSuccess<NotificationListDto>;
+    expect(after.data.items.find((notice) => notice.id === "ntf_admin_read")?.readAt).toMatch(
+      /^\d{4}-\d{2}-\d{2}T/,
+    );
+
+    const customerId = await env.DB.prepare(
+      "SELECT id FROM notifications WHERE appointment_id = ? AND audience = 'customer'",
+    )
+      .bind(id)
+      .first<{ id: string }>();
+    const hidden = await call(
+      `/api/v1/admin/notifications/${customerId?.id}/read`,
+      { method: "POST" },
+      cookie,
+    );
+    expect(hidden.status).toBe(404);
+  });
+
   it("hides a deactivated service from the public catalog", async () => {
     const created = await call(
       "/api/v1/admin/services",
@@ -515,4 +611,217 @@ describe("admin studio management", () => {
     expect(bytes.status).toBe(200);
     expect(bytes.headers.get("content-type")).toContain("image/png");
   });
+
+  it("closes a weekday, keeps the booking, and reopens the day", async () => {
+    await env.DB.prepare("DELETE FROM staff_time_off WHERE staff_id = 'ad_staff'").run();
+    const sunday = addDays(MONDAY, 6);
+    const listed = await call(
+      `/api/v1/admin/calendar?staffId=ad_staff&from=${MONDAY}&to=${sunday}`,
+      {},
+      cookie,
+    );
+    expect(listed.status).toBe(200);
+    const calendar = (await listed.json()) as ApiSuccess<AdminCalendarDto>;
+    const before = calendar.data.days.find((day) => day.date === MONDAY);
+    const weekly = calendar.data.days.find((day) => day.date === sunday);
+    expect(before).toMatchObject({ state: "open" });
+    expect(weekly).toMatchObject({ state: "weekly_closed", bookingCount: 0 });
+    expect(await timeOffCount()).toBe(0);
+
+    const refused = await call(
+      "/api/v1/admin/calendar/closures",
+      { method: "POST", body: JSON.stringify({ staffId: "ad_staff", date: sunday }) },
+      cookie,
+    );
+    expect(refused.status).toBe(409);
+    expect(((await refused.json()) as ApiErrorBody).error.code).toBe("weekly_closed");
+    expect(await timeOffCount()).toBe(0);
+
+    const startAt = at("15:00");
+    const id = "apt_admin_closure";
+    await insertAppointmentWithReservations(
+      createDb(env.DB),
+      {
+        id,
+        bookingReference: "ADMCLOSE",
+        managementTokenHash: "hash-close",
+        idempotencyKey: "admin-close",
+        customerName: "Amina",
+        customerEmail: null,
+        customerPhone: "+254712345678",
+        staffId: "ad_staff",
+        serviceId: "ad_svc",
+        serviceNameSnapshot: "Admin Gel",
+        durationMinutesSnapshot: 60,
+        priceMinorSnapshot: 150000,
+        currency: "KES",
+        startAt,
+        endAt: at("16:00"),
+        location: "studio",
+        address: null,
+        customerNotes: null,
+      },
+      reservationSlots(new Date(startAt), 60, "studio"),
+    );
+    const slotsBefore = await slotsFor(id);
+
+    const warned = await call(
+      `/api/v1/admin/calendar?staffId=ad_staff&from=${MONDAY}&to=${MONDAY}`,
+      {},
+      cookie,
+    );
+    const warnedDay = ((await warned.json()) as ApiSuccess<AdminCalendarDto>).data.days[0];
+    expect(warnedDay?.bookingCount).toBe((before?.bookingCount ?? 0) + 1);
+
+    const closed = await call(
+      "/api/v1/admin/calendar/closures",
+      { method: "POST", body: JSON.stringify({ staffId: "ad_staff", date: MONDAY }) },
+      cookie,
+    );
+    expect(closed.status).toBe(200);
+    expect(((await closed.json()) as ApiSuccess<CalendarDayDto>).data).toMatchObject({
+      date: MONDAY,
+      state: "closed",
+      bookingCount: warnedDay?.bookingCount,
+    });
+    expect(await timeOffCount()).toBe(1);
+    expect(await appointmentStatus(id)).toBe("pending");
+    expect(await slotsFor(id)).toEqual(slotsBefore);
+
+    const empty = await call(
+      `/api/v1/availability?serviceId=ad_svc&date=${MONDAY}&location=studio`,
+    );
+    expect(((await empty.json()) as ApiSuccess<AvailabilityDto>).data.slots).toEqual([]);
+
+    const again = await call(
+      "/api/v1/admin/calendar/closures",
+      { method: "POST", body: JSON.stringify({ staffId: "ad_staff", date: MONDAY }) },
+      cookie,
+    );
+    expect(again.status).toBe(200);
+    expect(await timeOffCount()).toBe(1);
+
+    const reopened = await call(
+      `/api/v1/admin/calendar/closures?staffId=ad_staff&date=${MONDAY}`,
+      { method: "DELETE" },
+      cookie,
+    );
+    expect(reopened.status).toBe(200);
+    expect(((await reopened.json()) as ApiSuccess<CalendarDayDto>).data.state).toBe("open");
+    expect(await timeOffCount()).toBe(0);
+    expect(await appointmentStatus(id)).toBe("pending");
+    expect(await slotsFor(id)).toEqual(slotsBefore);
+    const restored = await call(
+      `/api/v1/availability?serviceId=ad_svc&date=${MONDAY}&location=studio`,
+    );
+    expect(
+      ((await restored.json()) as ApiSuccess<AvailabilityDto>).data.slots.length,
+    ).toBeGreaterThan(0);
+  });
+
+  it("blocks part of a day and keeps an overlapping booking", async () => {
+    await env.DB.prepare("DELETE FROM staff_time_off WHERE staff_id = 'ad_staff'").run();
+    const open = await call(`/api/v1/availability?serviceId=ad_svc&date=${MONDAY}&location=studio`);
+    const before = ((await open.json()) as ApiSuccess<AvailabilityDto>).data.slots.map(
+      (slot) => slot.startAt,
+    );
+    expect(before).toContain(at("12:15"));
+    expect(before).toContain(at("13:00"));
+
+    const created = await call(
+      "/api/v1/admin/time-off",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          staffId: "ad_staff",
+          startDate: MONDAY,
+          startTime: "14:00",
+          endDate: MONDAY,
+          endTime: "16:00",
+          reason: "Away",
+        }),
+      },
+      cookie,
+    );
+    expect(created.status).toBe(201);
+
+    const blocked = await call(
+      `/api/v1/availability?serviceId=ad_svc&date=${MONDAY}&location=studio`,
+    );
+    const starts = ((await blocked.json()) as ApiSuccess<AvailabilityDto>).data.slots.map(
+      (slot) => slot.startAt,
+    );
+    expect(starts).not.toContain(at("13:00"));
+    expect(starts).toContain(at("12:15"));
+
+    const startAt = at("13:30");
+    const id = "apt_admin_partial";
+    await insertAppointmentWithReservations(
+      createDb(env.DB),
+      {
+        id,
+        bookingReference: "ADMPART",
+        managementTokenHash: "hash-partial",
+        idempotencyKey: "admin-partial",
+        customerName: "Amina",
+        customerEmail: null,
+        customerPhone: "+254712345678",
+        staffId: "ad_staff",
+        serviceId: "ad_svc",
+        serviceNameSnapshot: "Admin Gel",
+        durationMinutesSnapshot: 60,
+        priceMinorSnapshot: 150000,
+        currency: "KES",
+        startAt,
+        endAt: at("14:30"),
+        location: "studio",
+        address: null,
+        customerNotes: null,
+      },
+      reservationSlots(new Date(startAt), 60, "studio"),
+    );
+
+    const listed = await call(
+      `/api/v1/admin/calendar?staffId=ad_staff&from=${MONDAY}&to=${MONDAY}`,
+      {},
+      cookie,
+    );
+    expect(listed.status).toBe(200);
+    const day = ((await listed.json()) as ApiSuccess<AdminCalendarDto>).data.days[0];
+    expect(day?.state).toBe("open");
+    expect(day?.blocks).toEqual([
+      expect.objectContaining({
+        startAt: localToUtc(MONDAY, "14:00", TZ).toISOString(),
+        endAt: localToUtc(MONDAY, "16:00", TZ).toISOString(),
+        reason: "Away",
+      }),
+    ]);
+    expect(day?.bookings).toContainEqual({ startAt, endAt: at("14:30") });
+    expect(await appointmentStatus(id)).toBe("pending");
+    expect(await slotsFor(id)).toEqual(reservationSlots(new Date(startAt), 60, "studio"));
+    await env.DB.prepare("DELETE FROM staff_time_off WHERE staff_id = 'ad_staff'").run();
+  });
 });
+
+async function timeOffCount() {
+  const row = await env.DB.prepare(
+    "SELECT COUNT(*) AS n FROM staff_time_off WHERE staff_id = 'ad_staff'",
+  ).first<{ n: number }>();
+  return row?.n ?? 0;
+}
+
+async function appointmentStatus(id: string) {
+  const row = await env.DB.prepare("SELECT status FROM appointments WHERE id = ?")
+    .bind(id)
+    .first<{ status: string }>();
+  return row?.status;
+}
+
+async function slotsFor(appointmentId: string) {
+  const stored = await env.DB.prepare(
+    "SELECT slot_start_at FROM appointment_slot_reservations WHERE appointment_id = ? ORDER BY slot_start_at",
+  )
+    .bind(appointmentId)
+    .all<{ slot_start_at: string }>();
+  return stored.results.map((row) => row.slot_start_at);
+}

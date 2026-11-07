@@ -11,6 +11,7 @@ function request(path: string, init?: RequestInit) {
 
 beforeAll(async () => {
   await env.DB.batch([
+    env.DB.prepare("DELETE FROM notifications"),
     env.DB.prepare("DELETE FROM appointment_slot_reservations"),
     env.DB.prepare("DELETE FROM appointments"),
     env.DB.prepare("DELETE FROM staff_services"),
@@ -94,6 +95,7 @@ describe("GET /services/:id", () => {
 describe("database constraints", () => {
   it("rejects a second reservation for the same staff member and slot", async () => {
     await env.DB.batch([
+      env.DB.prepare("DELETE FROM notifications"),
       env.DB.prepare("DELETE FROM appointment_slot_reservations"),
       env.DB.prepare("DELETE FROM appointments"),
       env.DB.prepare("DELETE FROM staff WHERE id = 'staff_t'"),

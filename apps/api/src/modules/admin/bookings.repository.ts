@@ -5,6 +5,10 @@ import { appointmentSlotReservations, appointments, staff } from "../../db/schem
 import { decodeCursor, encodeCursor, pageOf } from "../../utils/cursor";
 import { AppError } from "../../utils/errors";
 import { auditInsertIfChanged } from "../auth/audit";
+import {
+  customerStatusNotification,
+  notificationInsertIfChanged,
+} from "../notifications/notifications";
 import { runBatch } from "./batch";
 import { canTransition } from "./booking-status";
 
@@ -114,12 +118,14 @@ export async function changeBookingStatus(
     );
   }
 
+  const notice = customerStatusNotification(current, next);
   const [changed] = await runBatch(db, [
     db
       .update(appointments)
       .set({ status: next, updatedAt: new Date().toISOString() })
       .where(and(eq(appointments.id, id), eq(appointments.status, current.status)))
       .returning({ id: appointments.id }),
+    ...(notice ? [notificationInsertIfChanged(db, notice)] : []),
     auditInsertIfChanged(db, {
       actorId,
       action: "booking.status_changed",

@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import type { ApiErrorBody, ApiSuccess, AvailabilityDto } from "@nailsbychao/types";
+import type { ApiErrorBody, ApiSuccess, AvailabilityDto, ClosedDatesDto } from "@nailsbychao/types";
 import { beforeAll, describe, expect, it } from "vitest";
 import { app } from "../src/app";
 import { reservationSlots } from "../src/modules/availability/availability.engine";
@@ -125,6 +125,47 @@ describe("GET /availability", () => {
     const { status, body } = await availabilityError({ serviceId: "av_svc", date });
     expect(status).toBe(400);
     expect(body.error.code).toBe("date_out_of_range");
+  });
+
+  it("lists regular days off and a closed weekday", async () => {
+    await env.DB.prepare("DELETE FROM staff_time_off WHERE staff_id = 'av_staff'").run();
+    const sunday = addDays(MONDAY, 6);
+    const openRes = await app.request(
+      `/api/v1/availability/closed-dates?${new URLSearchParams({
+        serviceId: "av_svc",
+        from: MONDAY,
+        to: sunday,
+      })}`,
+      {},
+      env,
+    );
+    expect(openRes.status).toBe(200);
+    const open = (await openRes.json()) as ApiSuccess<ClosedDatesDto>;
+    expect(open.data.dates).not.toContain(MONDAY);
+    expect(open.data.dates).toContain(addDays(MONDAY, 1));
+    expect(open.data.dates).toContain(sunday);
+
+    await env.DB.prepare(
+      `INSERT INTO staff_time_off (id, staff_id, start_at, end_at)
+       VALUES ('av_close', 'av_staff', ?, ?)`,
+    )
+      .bind(
+        localToUtc(MONDAY, "00:00", TZ).toISOString(),
+        localToUtc(addDays(MONDAY, 1), "00:00", TZ).toISOString(),
+      )
+      .run();
+    const closedRes = await app.request(
+      `/api/v1/availability/closed-dates?${new URLSearchParams({
+        serviceId: "av_svc",
+        from: MONDAY,
+        to: sunday,
+      })}`,
+      {},
+      env,
+    );
+    const closed = (await closedRes.json()) as ApiSuccess<ClosedDatesDto>;
+    expect(closed.data.dates).toContain(MONDAY);
+    await env.DB.prepare("DELETE FROM staff_time_off WHERE id = 'av_close'").run();
   });
 
   it("returns 404 for an inactive service", async () => {
