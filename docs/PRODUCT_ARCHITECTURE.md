@@ -35,7 +35,9 @@ Customers want to:
 - Find an available appointment.
 - Book without unnecessary steps.
 - Receive confirmation of their booking.
-- Retrieve, reschedule, or cancel their appointment according to studio policy.
+- Retrieve a booking from its manage link, or with its reference and phone.
+- Reschedule or cancel their appointment according to studio policy.
+- See an in-app notice when the booking is confirmed, moved, cancelled by Chao, completed, or marked as a no-show.
 
 ### 2.2 Studio administrator
 
@@ -48,6 +50,8 @@ The administrator wants to:
 - Configure staff working hours and time off.
 - Update gallery images.
 - Confirm, complete, mark as no-show, or cancel appointments. Moving a time is customer-only.
+- Close or reopen a day on the calendar.
+- Read in-app notices when a booking is created, cancelled, or moved.
 - Review booking history and basic operational information.
 
 ### 2.3 Nail technician or staff member
@@ -206,7 +210,7 @@ Features:
 Acceptance criteria:
 
 - Only published images appear publicly.
-- Image uploads are restricted by file type and size.
+- Image uploads are restricted by file type and size. The admin form shrinks the longest side to 1600 pixels before upload when that makes a smaller file.
 - Images load efficiently on mobile.
 - Removing an image from the gallery does not unintentionally delete an appointment record.
 
@@ -272,6 +276,8 @@ Initial features:
 - Service management.
 - Staff management.
 - Schedule and time-off management.
+- A calendar that closes or reopens one day by writing time off. A weekday with no hours stays closed until weekly hours change. Bookings already on that day stay.
+- In-app notices for new, cancelled, and moved bookings.
 - Gallery management.
 
 Acceptance criteria:
@@ -315,7 +321,8 @@ Acceptance criteria:
 - Customers should be able to book without creating an account.
 - The system collects only the contact information needed for the booking and confirmation process.
 - A booking reference alone should not grant unrestricted access to private customer information.
-- A secure token, verified contact method, or authenticated account must be used for sensitive booking-management operations.
+- The manage link carries a token. A customer who has lost it can open the booking with the reference and the phone number on the booking. That check issues a new token and leaves the original link working.
+- Sensitive booking-management operations require that token. Email and SMS are not used.
 
 ### Time and currency rules
 
@@ -384,17 +391,16 @@ The initial release can show an on-screen confirmation containing:
 - Booking reference.
 - Service, price, and duration.
 - Date and time in Nairobi.
-- Studio in Juja, or the house-call address. The apartment name stays off this screen until Chao confirms a studio booking.
+- Studio in Juja, or the house-call address. The apartment name stays off this screen.
 - Customer name, phone, and optional email and notes.
 - Instructions for cancellation or rescheduling. The technician is assigned by the server and is not shown here.
 
+The manage page and the admin dashboard also show in-app notices. They are saved in the same database operation as the booking change, so a failed change does not leave a notice. A new booking and a customer cancellation notify Chao. A move notifies both. Chao confirming, cancelling, completing, or marking a no-show notifies the customer.
+
 ### Future notification capabilities
 
-- Booking confirmation by email or SMS.
-- Cancellation confirmation.
-- Rescheduling confirmation.
+- The same booking events by email or SMS.
 - Appointment reminders.
-- Administrative booking alerts.
 
 Notifications should be sent only after the relevant booking change has been committed successfully. Failed notifications must not silently undo a valid booking.
 
@@ -428,7 +434,7 @@ Measure the product using metrics such as:
 - Cancellation and no-show rates.
 - Time required to create a booking.
 - Administrative time spent managing appointments.
-- Booking notification delivery success, once notifications are implemented.
+- Email and SMS delivery success, once those providers are added. In-app notices are already stored with the booking change.
 
 Avoid collecting unnecessary personal information just to produce analytics.
 

@@ -2,6 +2,7 @@ import type { AdminGalleryImageDto } from "@nailsbychao/types";
 import { useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useEffect, useState } from "react";
 import { useAdminGallery } from "@/features/admin/api";
+import { compressUpload } from "@/features/admin/compress-image";
 import {
   Field,
   fieldClass,
@@ -17,19 +18,25 @@ export function AdminGalleryPage() {
   const queryClient = useQueryClient();
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
 
   async function upload(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
     setMessage(null);
     const form = new FormData(event.currentTarget);
+    const source = form.get("file");
+    setPending(true);
     try {
+      if (source instanceof File) form.set("file", await compressUpload(source));
       await apiFetch("/admin/gallery", { auth: true, method: "POST", body: form });
       event.currentTarget.reset();
       setMessage("Image uploaded. It stays hidden until you publish it.");
       await queryClient.invalidateQueries({ queryKey: ["admin-gallery"] });
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.message : "The image was not uploaded.");
+    } finally {
+      setPending(false);
     }
   }
 
@@ -55,8 +62,8 @@ export function AdminGalleryPage() {
           </Field>
           {error ? <Notice tone="error">{error}</Notice> : null}
           {message ? <Notice tone="ok">{message}</Notice> : null}
-          <button type="submit" className={primaryButtonClass}>
-            Upload
+          <button type="submit" className={primaryButtonClass} disabled={pending}>
+            {pending ? "Uploading…" : "Upload"}
           </button>
         </form>
       </Panel>

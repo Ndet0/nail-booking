@@ -13,7 +13,7 @@
     {
       "binding": "DB",
       "database_name": "nailsbychao-db",
-      // Placeholder until the production database is created (Sprint 8).
+      // Local `wrangler dev` and `--local` commands do not use this id.
       "database_id": "00000000-0000-0000-0000-000000000000",
       "migrations_dir": "migrations"
     }
@@ -23,5 +23,33 @@
       "binding": "BUCKET",
       "bucket_name": "nailsbychao-gallery"
     }
-  ]
+  ],
+  "env": {
+    "production": {
+      "name": "www",
+      "vars": {
+        "ENVIRONMENT": "production",
+        "CORS_ORIGINS": "https://www.nailsbychao.workers.dev"
+      },
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "nailsbychao-db",
+          "database_id": "5e9816e1-e6a4-4060-a105-a0c3c8209ffa",
+          "migrations_dir": "migrations"
+        }
+      ],
+      "r2_buckets": [
+        {
+          "binding": "BUCKET",
+          "bucket_name": "nailsbychao-gallery"
+        }
+      ],
+      "assets": {
+        "directory": "../web/dist",
+        "not_found_handling": "single-page-application",
+        "run_worker_first": ["/api/*"]
+      }
+    }
+  }
 }

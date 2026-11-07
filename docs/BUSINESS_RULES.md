@@ -11,7 +11,7 @@ This records the Sprint 0 business decisions. Items marked **TBC** are proposed 
 | Instagram | [@nailsbychao_](https://www.instagram.com/nailsbychao_/) | Confirmed |
 | Service model | Home-based studio **and** house calls | Confirmed (Instagram) |
 | Country / timezone | Kenya / `Africa/Nairobi` | Confirmed |
-| Studio area / address | Dunamis Apartment, Juja. Public site shows **Juja** only; the apartment name is given after a booking is confirmed. | Confirmed |
+| Studio area / address | Dunamis Apartment, Juja. The public site, confirmation, and manage page show **Juja** only. The API does not return the apartment name. | Confirmed |
 | Phone / WhatsApp | +254 113 563 021 | Confirmed |
 | Email | florakiteria@gmail.com | Confirmed |
 | Logo / cover image | — | **TBC** |
@@ -63,7 +63,11 @@ These values live in `apps/api/src/config/studio.ts`. Change them there and here
 - Customers can book from today up to the maximum advance window, counted in Nairobi dates. Earlier or later dates are rejected.
 - `pending` and `confirmed` bookings block availability. Cancelling a booking deletes its reservations in the same operation as the status change. `completed` and `no_show` bookings keep theirs as a record.
 - An administrator may change status only along these paths: `pending` to `confirmed` or `cancelled`; `confirmed` to `completed`, `no_show`, or `cancelled`. `cancelled`, `completed`, and `no_show` are terminal. Any other change is rejected. Rescheduling is not an admin status change, and the 24-hour window does not apply to Chao.
-- A customer manages a booking with the reference plus the management token (`X-Booking-Token`). The reference alone is not enough, and a wrong token looks the same as an unknown reference.
+- A customer manages a booking with the reference plus a token (`X-Booking-Token`). That token is the original manage-link token or the current recovery token. The reference alone is not enough, and a wrong token looks the same as an unknown reference.
+- A customer who no longer has the link can open the booking with its reference and phone. The phone is compared in `+254` form. A missing booking and a wrong phone look the same. Success stores a new recovery-token hash and returns that token once. The original link keeps working. More than 8 attempts from one address in 15 minutes are refused. Only a hash of the address is stored.
+- Creating, cancelling, and rescheduling are limited separately to 8 attempts from one address in 15 minutes. A request that fails validation does not count. A refused attempt does not change the booking. Only a hash of the address is stored.
+- A day is closed on the customer calendar when no eligible staff member is open: that weekday has no hours, or time off covers every working period. Closing a day in the admin calendar inserts time off from midnight to the next midnight in Nairobi. Reopening deletes the time off that overlaps that day. A weekday with no hours stays closed until weekly hours change. Pending and confirmed bookings already on a closed day stay there.
+- Booking changes write an in-app notice in the same operation. A new booking and a customer cancellation notify Chao. A move notifies Chao and the customer. Chao confirming, cancelling, completing, or marking a no-show notifies the customer. Email and SMS are not sent.
 - A customer may cancel a `pending` or `confirmed` booking until 24 hours before its start (`customerChangeCutoffMinutes`). The status becomes `cancelled` and that booking's reservations are deleted in the same batch.
 - A customer may reschedule once, while the current start is still outside that window. The new start must also be at least 24 hours away. The same batch updates `start_at`, `end_at`, and `rescheduled_at`, deletes the old slots, and inserts the new ones. A slot conflict rolls the whole move back. Service snapshots, staff, location, and address stay as booked.
 - House-call bookings must include an address.
