@@ -864,9 +864,9 @@ The local environment should exercise the same D1-oriented data model used in pr
 9. Verify CORS, authentication, database access, and image delivery.
 10. Run production smoke tests, especially booking-conflict tests.
 
-The current production deploy is one Worker, `www`, at `https://www.nailsbychao.workers.dev`. The account subdomain is `nailsbychao`, so the Worker is not also named `nailsbychao`. It serves the Vite build as static assets and runs the Hono API for `/api/*`. `VITE_API_URL` stays empty because the browser calls the same origin. Production D1 is `nailsbychao-db` (`5e9816e1-e6a4-4060-a105-a0c3c8209ffa`, region WEUR). `BETTER_AUTH_SECRET` and `BETTER_AUTH_URL` are Worker secrets. Local `wrangler dev` does not use that database.
+The current production deploy is one Worker, `nailsbychao`, at `https://nailsbychao.festuskisoi.workers.dev`. The account subdomain is `festuskisoi`. It serves the Vite build as static assets and runs the Hono API for `/api/*`. `VITE_API_URL` stays empty because the browser calls the same origin. Production D1 is `nailsbychao-db` (`5e9816e1-e6a4-4060-a105-a0c3c8209ffa`, region WEUR). `BETTER_AUTH_SECRET` and `BETTER_AUTH_URL` are Worker secrets. Local `wrangler dev` does not use that database.
 
-Production R2 is `nailsbychao-gallery` in WEUR, bound as `BUCKET` on the Worker `www`. Gallery images stay private in that bucket and are served by the Worker. The public gallery list stays empty until an image is published.
+Production R2 is `nailsbychao-gallery` in WEUR, bound as `BUCKET` on the Worker `nailsbychao`. Gallery images stay private in that bucket and are served by the Worker. The public gallery list stays empty until an image is published.
 
 Deploy from `apps/api` after `pnpm --filter @nailsbychao/web build`:
 

@@ -138,7 +138,7 @@ pnpm db:seed:local
 
 ## Production
 
-The live site and API are the same Worker: https://www.nailsbychao.workers.dev
+The live site and API are the same Worker: https://nailsbychao.festuskisoi.workers.dev
 
 `apps/api/wrangler.jsonc` keeps local development on `--local`. Production is `env.production`. Deploy from `apps/api` with `pnpm --filter @nailsbychao/web build`, then `wrangler deploy --env production`. Remote migrations are `wrangler d1 migrations apply nailsbychao-db --remote --env production`. `pnpm admin:create` still writes to the local database only.
 

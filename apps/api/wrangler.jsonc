@@ -26,10 +26,10 @@
   ],
   "env": {
     "production": {
-      "name": "www",
+      "name": "nailsbychao",
       "vars": {
         "ENVIRONMENT": "production",
-        "CORS_ORIGINS": "https://www.nailsbychao.workers.dev"
+        "CORS_ORIGINS": "https://nailsbychao.festuskisoi.workers.dev"
       },
       "d1_databases": [
         {

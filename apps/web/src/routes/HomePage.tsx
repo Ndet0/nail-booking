@@ -9,7 +9,7 @@ const INSTAGRAM_URL = "https://www.instagram.com/nailsbychao_/";
 const PHONE_DISPLAY = "+254 113 563 021";
 const PHONE_TEL = "+254113563021";
 const WHATSAPP_URL = "https://wa.me/254113563021";
-const EMAIL = "florakiteria@gmail.com";
+const EMAIL = "chaokiteria@gmail.com";
 
 export function HomePage() {
   return (
