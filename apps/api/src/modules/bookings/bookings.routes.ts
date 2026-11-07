@@ -28,7 +28,8 @@ import {
   rescheduleBooking,
 } from "./booking-management";
 import { isCanonicalSlotInstant, parseCreateBooking } from "./booking-request";
-import { createBooking, sha256Hex } from "./bookings.repository";
+import { createBooking } from "./bookings.repository";
+import { assertBookingWriteAllowed, clientAddressHash } from "./write-limit";
 
 const calendarDate = z.string().refine(isCalendarDate, "Use a real date in YYYY-MM-DD format.");
 
@@ -69,7 +70,7 @@ export const bookingsRoutes = new Hono<AppEnv>()
     }
 
     const db = createDb(c.env.DB);
-    const ipHash = await sha256Hex(c.req.header("cf-connecting-ip")?.trim() || "unknown");
+    const ipHash = await clientAddressHash(c.req.header("cf-connecting-ip"));
     await assertLookupAllowed(db, ipHash);
     const data = await lookupBooking(db, parsed.data.bookingReference, parsed.data.customerPhone);
     return c.json({ data } satisfies ApiSuccess<BookingDto>);
@@ -83,7 +84,13 @@ export const bookingsRoutes = new Hono<AppEnv>()
     }
 
     const input = parseCreateBooking(body, c.req.header("Idempotency-Key"));
-    const result = await createBooking(createDb(c.env.DB), input);
+    const db = createDb(c.env.DB);
+    await assertBookingWriteAllowed(
+      db,
+      await clientAddressHash(c.req.header("cf-connecting-ip")),
+      "create",
+    );
+    const result = await createBooking(db, input);
     const status = result.created ? 201 : 200;
     return c.json({ data: result.booking } satisfies ApiSuccess<BookingDto>, status);
   })
@@ -110,6 +117,11 @@ export const bookingsRoutes = new Hono<AppEnv>()
   })
   .post("/:reference/cancel", async (c) => {
     const db = createDb(c.env.DB);
+    await assertBookingWriteAllowed(
+      db,
+      await clientAddressHash(c.req.header("cf-connecting-ip")),
+      "cancel",
+    );
     const row = await requireBooking(db, c.req.param("reference"), c.req.header("X-Booking-Token"));
     const data = await cancelBooking(db, row);
     return c.json({ data } satisfies ApiSuccess<BookingDto>);
@@ -132,6 +144,11 @@ export const bookingsRoutes = new Hono<AppEnv>()
     }
 
     const db = createDb(c.env.DB);
+    await assertBookingWriteAllowed(
+      db,
+      await clientAddressHash(c.req.header("cf-connecting-ip")),
+      "reschedule",
+    );
     const row = await requireBooking(db, c.req.param("reference"), c.req.header("X-Booking-Token"));
     const data = await rescheduleBooking(db, row, parsed.data.startAt);
     return c.json({ data } satisfies ApiSuccess<BookingDto>);

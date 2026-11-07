@@ -475,6 +475,34 @@ export const bookingLookupAttempts = sqliteTable(
   ],
 );
 
+/**
+ * Create, cancel, and reschedule attempts. The address is stored only as a hash.
+ * Each kind has its own 15-minute window, and rows older than that window are
+ * deleted on the next attempt. This row is written before the booking batch.
+ */
+export const bookingWriteAttempts = sqliteTable(
+  "booking_write_attempts",
+  {
+    id: text("id").primaryKey(),
+    ipHash: text("ip_hash").notNull(),
+    kind: text("kind").notNull(),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [
+    index("booking_write_attempts_kind_ip_created_idx").on(
+      table.kind,
+      table.ipHash,
+      table.createdAt,
+    ),
+    check("booking_write_attempts_ip_hash", sql`length(${table.ipHash}) = 64`),
+    check(
+      "booking_write_attempts_kind_valid",
+      sql`${table.kind} IN ('create', 'cancel', 'reschedule')`,
+    ),
+    check("booking_write_attempts_created_at", utcInstant(table.createdAt)),
+  ],
+);
+
 /** Sign-in loads the credential account through this relation. The property name must be `accounts`. */
 export const userRelations = relations(user, ({ many }) => ({
   accounts: many(account),

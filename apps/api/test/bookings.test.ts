@@ -47,9 +47,10 @@ function bookingBody(
   };
 }
 
-async function postBooking(body: unknown, idempotencyKey?: string) {
+async function postBooking(body: unknown, idempotencyKey?: string, ip?: string) {
   const headers = new Headers({ "Content-Type": "application/json" });
   if (idempotencyKey) headers.set("Idempotency-Key", idempotencyKey);
+  if (ip) headers.set("CF-Connecting-IP", ip);
   const res = await app.request(
     "/api/v1/bookings",
     { method: "POST", headers, body: JSON.stringify(body) },
@@ -97,6 +98,7 @@ beforeEach(async () => {
   await env.DB.batch([
     env.DB.prepare("DELETE FROM notifications"),
     env.DB.prepare("DELETE FROM booking_lookup_attempts"),
+    env.DB.prepare("DELETE FROM booking_write_attempts"),
     env.DB.prepare("DELETE FROM appointment_slot_reservations"),
     env.DB.prepare("DELETE FROM appointments"),
   ]);
@@ -363,9 +365,15 @@ function bookingPath(reference: string, suffix = "") {
   return `/api/v1/bookings/${encodeURIComponent(reference)}${suffix}`;
 }
 
-async function callBooking<T = BookingDto>(path: string, token?: string, init?: RequestInit) {
+async function callBooking<T = BookingDto>(
+  path: string,
+  token?: string,
+  init?: RequestInit,
+  ip?: string,
+) {
   const headers = new Headers(init?.headers);
   if (token) headers.set("X-Booking-Token", token);
+  if (ip) headers.set("CF-Connecting-IP", ip);
   const res = await app.request(path, { ...init, headers }, env);
   const json = (await res.json()) as ApiSuccess<T> | ApiErrorBody;
   return { status: res.status, json };
@@ -797,6 +805,95 @@ describe("POST /bookings/lookup", () => {
       .bind(booking.id)
       .first<{ recovery_token_hash: string | null }>();
     expect(stored?.recovery_token_hash).toBeNull();
+  });
+});
+
+async function seedWriteAttempts(kind: string, ip: string, rows: number, createdAt: string) {
+  const ipHash = await sha256Hex(ip);
+  await env.DB.batch(
+    Array.from({ length: rows }, () =>
+      env.DB.prepare(
+        "INSERT INTO booking_write_attempts (id, ip_hash, kind, created_at) VALUES (?, ?, ?, ?)",
+      ).bind(crypto.randomUUID(), ipHash, kind, createdAt),
+    ),
+  );
+}
+
+describe("booking write limits", () => {
+  it("does not count a create that fails validation", async () => {
+    const { status } = await postBooking({ customerName: "Amina" }, "short-key");
+    expect(status).toBe(400);
+    expect(await count("SELECT COUNT(*) AS n FROM booking_write_attempts")).toBe(0);
+  });
+
+  it("ignores expired create attempts and blocks the ninth recent one", async () => {
+    const ip = "203.0.113.80";
+    await seedWriteAttempts("create", ip, 8, new Date(Date.now() - 16 * 60 * 1000).toISOString());
+    const created = await postBooking(bookingBody(at("10:00")), crypto.randomUUID(), ip);
+    expect(created.status).toBe(201);
+    await seedWriteAttempts("create", ip, 7, new Date().toISOString());
+    const blocked = await postBooking(bookingBody(at("12:00")), crypto.randomUUID(), ip);
+    expect(blocked.status).toBe(429);
+    if (!("error" in blocked.json)) throw new Error("expected an error");
+    expect(blocked.json.error.code).toBe("rate_limited");
+    expect(await count("SELECT COUNT(*) AS n FROM appointments")).toBe(1);
+  });
+
+  it("still cancels when create attempts for that address are exhausted", async () => {
+    const ip = "203.0.113.81";
+    const booking = await booked();
+    await seedWriteAttempts("create", ip, 8, new Date().toISOString());
+    const cancelled = await callBooking(
+      bookingPath(booking.bookingReference, "/cancel"),
+      booking.managementToken ?? "",
+      { method: "POST" },
+      ip,
+    );
+    expect(cancelled.status).toBe(200);
+  });
+
+  it("blocks the ninth cancel and leaves the booking pending", async () => {
+    const ip = "203.0.113.82";
+    const booking = await booked();
+    await seedWriteAttempts("cancel", ip, 8, new Date().toISOString());
+    const blocked = await callBooking(
+      bookingPath(booking.bookingReference, "/cancel"),
+      booking.managementToken ?? "",
+      { method: "POST" },
+      ip,
+    );
+    expect(blocked.status).toBe(429);
+    if (!("error" in blocked.json)) throw new Error("expected an error");
+    expect(blocked.json.error.code).toBe("rate_limited");
+    const stored = await env.DB.prepare("SELECT status FROM appointments WHERE id = ?")
+      .bind(booking.id)
+      .first<{ status: string }>();
+    expect(stored?.status).toBe("pending");
+  });
+
+  it("blocks the ninth reschedule and leaves the original time", async () => {
+    const ip = "203.0.113.83";
+    const booking = await booked();
+    await seedWriteAttempts("reschedule", ip, 8, new Date().toISOString());
+    const blocked = await callBooking(
+      bookingPath(booking.bookingReference, "/reschedule"),
+      booking.managementToken ?? "",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ startAt: at("12:00") }),
+      },
+      ip,
+    );
+    expect(blocked.status).toBe(429);
+    if (!("error" in blocked.json)) throw new Error("expected an error");
+    expect(blocked.json.error.code).toBe("rate_limited");
+    const stored = await env.DB.prepare(
+      "SELECT start_at, rescheduled_at FROM appointments WHERE id = ?",
+    )
+      .bind(booking.id)
+      .first<{ start_at: string; rescheduled_at: string | null }>();
+    expect(stored).toEqual({ start_at: booking.startAt, rescheduled_at: null });
   });
 });
 
