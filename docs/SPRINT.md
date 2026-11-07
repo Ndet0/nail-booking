@@ -419,7 +419,7 @@ If D1's supported write operations and constraints do not provide the required g
 - [ ] Verify booking lookup authorization.
 - [ ] Verify request validation.
 - [ ] Verify database queries use safe parameterization.
-- [x] Configure production CORS. *Allows `https://www.nailsbychao.workers.dev`.*
+- [x] Configure production CORS. *Allows `https://nailsbychao.festuskisoi.workers.dev`.*
 - [x] Add appropriate rate limits and anti-abuse controls. *Sign-in is limited by Better Auth. Phone lookup, create, cancel, and reschedule are each limited to 8 attempts per address in 15 minutes. The address is stored only as a hash, and a refused write does not change the booking.*
 - [ ] Review authentication and session security.
 - [ ] Review file upload validation.
@@ -436,7 +436,7 @@ If D1's supported write operations and constraints do not provide the required g
 - [x] Configure the production frontend API URL. *The site and API share one origin, so `VITE_API_URL` stays empty.*
 - [x] Deploy the Hono Worker.
 - [x] Deploy the frontend to the chosen Cloudflare-compatible hosting service. *Static assets on the same Worker, with client routes served as a single-page app.*
-- [x] Configure production domains. *workers.dev subdomain `nailsbychao`. No custom domain is attached.*
+- [x] Configure production domains. *Account subdomain `festuskisoi`. The Worker is `nailsbychao`, so the public URL is `https://nailsbychao.festuskisoi.workers.dev`. No custom domain is attached.*
 - [x] Verify HTTPS and CORS.
 - [x] Verify API-to-D1 connectivity.
 - [ ] Verify image delivery. *The bucket is attached. An admin upload has not been checked yet.*
