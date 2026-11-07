@@ -180,14 +180,14 @@ A task is complete when:
 - [x] Implement `GET /api/v1/gallery`.
 - [x] Add gallery metadata and publication status. *New uploads stay unpublished.*
 - [x] Configure Cloudflare R2 for image storage, if included in this sprint. *Local `BUCKET` binding. No Cloudflare account is required for local development.*
-- [x] Validate image file types and upload sizes. *JPEG, PNG, and WebP by magic bytes, 5 MB cap.*
+- [x] Validate image file types and upload sizes. *JPEG, PNG, and WebP by magic bytes, 5 MB cap. The admin form shrinks the longest side to 1600 pixels and prefers WebP when that file is smaller.*
 - [x] Configure safe image delivery. *Public bytes only for published images. Admin preview is authenticated.*
 - [x] Add contact and opening-hours information. *Public site shows Juja, hours, phone, WhatsApp, and email. The apartment name stays private.*
 - [x] Add the cancellation policy and relevant booking guidance. *Shown on the booking form, the confirmation, and the manage page: cancel or move once until 24 hours before.*
 - [ ] Ensure the interface is mobile-responsive.
 - [ ] Add accessible navigation and focus states.
 - [ ] Optimize image loading.
-- [ ] Test the public pages on desktop and mobile viewports.
+- [x] Test the public pages on desktop and mobile viewports. *Playwright runs the customer journey on a Pixel 5 viewport and on desktop.*
 
 ### Deliverables
 
@@ -227,7 +227,7 @@ A task is complete when:
 - [x] Exclude slots that cannot fit the full service duration.
 - [x] Exclude slots blocked by existing appointments.
 - [x] Exclude slots blocked by time off.
-- [x] Implement the frontend date picker. *A month calendar (`DateCalendar`) on `/book/:serviceId` and on the manage page.*
+- [x] Implement the frontend date picker. *A month calendar (`DateCalendar`) on `/book/:serviceId` and on the manage page. Closed days come from working hours and time off. `/admin/calendar` closes or reopens a day by writing that time off.*
 - [x] Display available time slots.
 - [x] Add a clear empty state when no slots are available.
 - [x] Test availability at opening and closing boundaries.
@@ -317,7 +317,7 @@ If D1's supported write operations and constraints do not provide the required g
 - [x] Ensure public registration cannot grant admin privileges. *HTTP sign-up is disabled, and a session still needs an `admins` row.*
 - [x] Implement server-side admin authorization middleware.
 - [x] Build the admin login page.
-- [x] Build the admin dashboard layout.
+- [x] Build the admin dashboard layout. *Bookings, calendar, notifications, services, staff, and gallery.*
 - [x] Display upcoming appointments.
 - [x] Add booking date filters.
 - [x] Add booking status filters.
@@ -358,7 +358,7 @@ If D1's supported write operations and constraints do not provide the required g
 
 ### Checklist
 
-- [x] Define the secure booking lookup mechanism. *The reference plus `X-Booking-Token`. A missing booking, a missing token, and a wrong token return the same 401.*
+- [x] Define the secure booking lookup mechanism. *The manage link sends the reference plus `X-Booking-Token`, which may be the original token or the current recovery token. A missing booking, a missing token, and a wrong token return the same 401. `POST /api/v1/bookings/lookup` accepts the reference and phone, is limited to 8 attempts per address in 15 minutes, and returns a new recovery token once.*
 - [x] Implement `GET /api/v1/bookings/:reference` with appropriate verification.
 - [x] Implement booking cancellation.
 - [x] Release slot reservations when a cancellation succeeds.
@@ -367,23 +367,23 @@ If D1's supported write operations and constraints do not provide the required g
 - [x] Validate the new slot before rescheduling.
 - [x] Ensure rescheduling cannot leave the appointment without a valid reservation. *One D1 batch. A slot conflict rolls the move back.*
 - [x] Prevent unauthorized access using a booking reference alone.
-- [x] Build the booking lookup interface. *`/manage`, and the confirmation link `/manage/:reference#token`.*
+- [x] Build the booking lookup interface. *`/manage` takes the reference and phone, or a saved link. The confirmation link is `/manage/:reference#token`.*
 - [x] Build the cancellation confirmation flow.
 - [x] Add customer-facing booking status messages.
-- [x] Configure an email or SMS provider if selected. *Not selected. Confirmation stays on screen. Email and SMS remain Sprint 9.*
-- [x] Send confirmations only after successful booking persistence. *The screen updates after the booking batch commits. No provider is called.*
-- [x] Add notification failure handling. *Deferred to Sprint 9 with the provider. Nothing is sent, so a failure cannot change the booking.*
-- [x] Add notification retry support if needed. *Deferred to Sprint 9.*
+- [x] Configure an email or SMS provider if selected. *Not selected. The customer still sees the confirmation on screen. In-app notices are rows in D1. Email and SMS remain Sprint 9.*
+- [x] Send confirmations only after successful booking persistence. *The screen updates after the booking batch commits. That batch also inserts Chao's in-app notice. No email or SMS provider is called.*
+- [x] Add notification failure handling. *An in-app notice is in the same batch as the booking change, so a failed batch leaves neither. Provider failure handling stays with email and SMS in Sprint 9.*
+- [x] Add notification retry support if needed. *Not needed for the in-app rows. Provider retry stays in Sprint 9.*
 - [x] Test cancellation and reservation release.
 - [x] Test rescheduling conflicts.
-- [x] Test notification failure without corrupting booking state. *No provider is called. Booking writes stay in their own batch, which is what Sprint 9 must keep.*
+- [x] Test notification failure without corrupting booking state. *No provider is called. The notice insert sits in the booking batch, which is what Sprint 9 must keep when a provider is added.*
 
 ### Deliverables
 
-- Secure booking lookup.
+- Secure booking lookup, including recovery by reference and phone.
 - Booking cancellation.
 - Rescheduling if included.
-- Optional email or SMS notifications.
+- In-app notices for Chao and the customer. Email and SMS are not included.
 
 ### Acceptance criteria
 
@@ -403,13 +403,13 @@ If D1's supported write operations and constraints do not provide the required g
 
 #### Code quality
 
-- [ ] Run the production frontend build.
-- [ ] Run TypeScript checks.
-- [ ] Run Biome linting.
-- [ ] Run Biome formatting checks.
-- [ ] Run unit tests.
-- [ ] Run API integration tests.
-- [ ] Run end-to-end tests.
+- [x] Run the production frontend build.
+- [x] Run TypeScript checks.
+- [x] Run Biome linting.
+- [x] Run Biome formatting checks.
+- [x] Run unit tests.
+- [x] Run API integration tests.
+- [x] Run end-to-end tests. *`pnpm test:e2e` covers the customer journey on a phone-sized viewport and on desktop, and the admin journey on desktop.*
 - [ ] Remove unused code and debug logging.
 - [ ] Review dependency versions and security advisories.
 
@@ -419,8 +419,8 @@ If D1's supported write operations and constraints do not provide the required g
 - [ ] Verify booking lookup authorization.
 - [ ] Verify request validation.
 - [ ] Verify database queries use safe parameterization.
-- [ ] Configure production CORS.
-- [ ] Add appropriate rate limits and anti-abuse controls.
+- [x] Configure production CORS. *Allows `https://www.nailsbychao.workers.dev`.*
+- [x] Add appropriate rate limits and anti-abuse controls. *Sign-in is limited by Better Auth. Phone lookup, create, cancel, and reschedule are each limited to 8 attempts per address in 15 minutes. The address is stored only as a hash, and a refused write does not change the booking.*
 - [ ] Review authentication and session security.
 - [ ] Review file upload validation.
 - [ ] Verify that secrets are not committed or exposed.
@@ -428,23 +428,23 @@ If D1's supported write operations and constraints do not provide the required g
 
 #### Cloudflare deployment
 
-- [ ] Create the production D1 database.
-- [ ] Configure production D1 bindings.
-- [ ] Review and apply production migrations.
-- [ ] Create and configure the R2 bucket if image storage is used.
-- [ ] Configure Worker secrets.
-- [ ] Configure the production frontend API URL.
-- [ ] Deploy the Hono Worker.
-- [ ] Deploy the frontend to the chosen Cloudflare-compatible hosting service.
-- [ ] Configure production domains.
-- [ ] Verify HTTPS and CORS.
-- [ ] Verify API-to-D1 connectivity.
-- [ ] Verify image delivery.
-- [ ] Run the health check.
-- [ ] Test a complete production booking.
-- [ ] Test booking cancellation and reservation release.
-- [ ] Run a controlled booking-conflict test.
-- [ ] Document rollback and recovery procedures.
+- [x] Create the production D1 database. *`nailsbychao-db` in WEUR, id `5e9816e1-e6a4-4060-a105-a0c3c8209ffa`.*
+- [x] Configure production D1 bindings. *`env.production` in `apps/api/wrangler.jsonc`. Local development still uses `--local`.*
+- [x] Review and apply production migrations. *`0000` through `0006`.*
+- [x] Create and configure the R2 bucket if image storage is used. *`nailsbychao-gallery` in WEUR, bound as `BUCKET` on the production Worker. The public gallery list stays empty until an image is published.*
+- [x] Configure Worker secrets. *`BETTER_AUTH_SECRET` and `BETTER_AUTH_URL` are Worker secrets, not files in the repo.*
+- [x] Configure the production frontend API URL. *The site and API share one origin, so `VITE_API_URL` stays empty.*
+- [x] Deploy the Hono Worker.
+- [x] Deploy the frontend to the chosen Cloudflare-compatible hosting service. *Static assets on the same Worker, with client routes served as a single-page app.*
+- [x] Configure production domains. *workers.dev subdomain `nailsbychao`. No custom domain is attached.*
+- [x] Verify HTTPS and CORS.
+- [x] Verify API-to-D1 connectivity.
+- [ ] Verify image delivery. *The bucket is attached. An admin upload has not been checked yet.*
+- [x] Run the health check.
+- [x] Test a complete production booking.
+- [x] Test booking cancellation and reservation release.
+- [x] Run a controlled booking-conflict test. *Two simultaneous creates for one slot: one `201`, one `409`. The winner was then cancelled.*
+- [x] Document rollback and recovery procedures. *See Technical architecture, Deployment.*
 
 ### Deliverables
 

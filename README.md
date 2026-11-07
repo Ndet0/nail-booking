@@ -129,11 +129,18 @@ pnpm db:seed:local
 | `pnpm build` | Production build |
 | `pnpm typecheck` | TypeScript checks for all workspaces |
 | `pnpm test` | API tests against a local D1 (workerd) |
+| `pnpm test:e2e` | Browser tests for the booking and admin journeys. Reuses `pnpm dev` when it is already running |
 | `pnpm lint` | Biome lint and format check |
 | `pnpm format` | Biome format (writes changes) |
 | `pnpm --filter @nailsbychao/api db:generate` | Generate a new migration after changing `apps/api/src/db/schema.ts` |
 | `pnpm admin:create` | Create the first administrator from `ADMIN_EMAIL`, `ADMIN_PASSWORD`, and `ADMIN_NAME` |
 | `pnpm admin:set-password` | Replace that administrator's password and sign them out |
+
+## Production
+
+The live site and API are the same Worker: https://www.nailsbychao.workers.dev
+
+`apps/api/wrangler.jsonc` keeps local development on `--local`. Production is `env.production`. Deploy from `apps/api` with `pnpm --filter @nailsbychao/web build`, then `wrangler deploy --env production`. Remote migrations are `wrangler d1 migrations apply nailsbychao-db --remote --env production`. `pnpm admin:create` still writes to the local database only.
 
 ## API conventions
 
