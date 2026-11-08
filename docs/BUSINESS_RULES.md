@@ -13,7 +13,7 @@ This records the Sprint 0 business decisions. Items marked **TBC** are proposed 
 | Country / timezone | Kenya / `Africa/Nairobi` | Confirmed |
 | Studio area / address | Dunamis Apartment, Juja. The public site, confirmation, and manage page show **Juja** only. The API does not return the apartment name. | Confirmed |
 | Phone / WhatsApp | +254 113 563 021 | Confirmed |
-| Email | florakiteria@gmail.com | Confirmed |
+| Email | chaokiteria@gmail.com | Confirmed |
 | Logo / cover image | — | **TBC** |
 
 ## 2. Brand direction
