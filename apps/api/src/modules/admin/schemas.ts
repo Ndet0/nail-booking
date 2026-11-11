@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { appointmentStatuses } from "../../db/schema";
 import { isCalendarDate } from "../../utils/studio-time";
+import { normalizeSlug } from "./slug";
 
 const localTime = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Use HH:MM.");
 const calendarDate = z.string().refine(isCalendarDate, "Use a real date in YYYY-MM-DD format.");
@@ -28,10 +29,14 @@ const serviceFields = {
   name: z.string().trim().min(1).max(80),
   slug: z
     .string()
-    .trim()
-    .min(1)
-    .max(80)
-    .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "Use lowercase letters, numbers, and hyphens."),
+    .transform(normalizeSlug)
+    .pipe(
+      z
+        .string()
+        .min(1)
+        .max(80)
+        .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "Use lowercase letters, numbers, and hyphens."),
+    ),
   description: z.string().trim().max(500).nullable(),
   category: z.enum(["nails", "makeup"]),
   durationMinutes: z
