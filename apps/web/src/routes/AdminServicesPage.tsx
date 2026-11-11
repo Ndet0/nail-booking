@@ -2,6 +2,8 @@ import type { AdminServiceDto, ServiceCategory } from "@nailsbychao/types";
 import { useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useState } from "react";
 import { useAdminServices } from "@/features/admin/api";
+import { adminFormError } from "@/features/admin/errors";
+import { normalizeSlug } from "@/features/admin/slug";
 import {
   Field,
   fieldClass,
@@ -10,7 +12,7 @@ import {
   primaryButtonClass,
   secondaryButtonClass,
 } from "@/features/admin/ui";
-import { ApiError, apiFetch } from "@/lib/api";
+import { apiFetch } from "@/lib/api";
 import { formatDuration, formatPrice } from "@/lib/format";
 
 type Draft = {
@@ -38,7 +40,7 @@ const EMPTY: Draft = {
 function toBody(draft: Draft) {
   return {
     name: draft.name.trim(),
-    slug: draft.slug.trim(),
+    slug: normalizeSlug(draft.slug),
     description: draft.description.trim() || null,
     category: draft.category,
     durationMinutes: Number(draft.durationMinutes),
@@ -53,6 +55,7 @@ export function AdminServicesPage() {
   const query = useAdminServices();
   const queryClient = useQueryClient();
   const [draft, setDraft] = useState<Draft>(EMPTY);
+  const [formKey, setFormKey] = useState(0);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -68,11 +71,12 @@ export function AdminServicesPage() {
         body: JSON.stringify(toBody(draft)),
       });
       setDraft(EMPTY);
+      setFormKey((key) => key + 1);
       setMessage("Service created.");
       await queryClient.invalidateQueries({ queryKey: ["admin-services"] });
       await queryClient.invalidateQueries({ queryKey: ["services"] });
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : "The service was not saved.");
+      setError(adminFormError(caught, "The service was not saved."));
     }
   }
 
@@ -81,7 +85,7 @@ export function AdminServicesPage() {
       <h1 className="text-2xl font-semibold">Services</h1>
       <Panel title="New service">
         <form onSubmit={create} className="grid gap-3">
-          <ServiceFields draft={draft} onChange={setDraft} />
+          <ServiceFields key={formKey} draft={draft} onChange={setDraft} autoSlug />
           {error ? <Notice tone="error">{error}</Notice> : null}
           {message ? <Notice tone="ok">{message}</Notice> : null}
           <button type="submit" className={primaryButtonClass}>
@@ -100,7 +104,30 @@ export function AdminServicesPage() {
   );
 }
 
-function ServiceFields({ draft, onChange }: { draft: Draft; onChange: (draft: Draft) => void }) {
+function ServiceFields({
+  draft,
+  onChange,
+  autoSlug = false,
+}: {
+  draft: Draft;
+  onChange: (draft: Draft) => void;
+  autoSlug?: boolean;
+}) {
+  const [slugEdited, setSlugEdited] = useState(!autoSlug);
+
+  function setName(name: string) {
+    onChange({
+      ...draft,
+      name,
+      slug: slugEdited ? draft.slug : normalizeSlug(name),
+    });
+  }
+
+  function setSlug(slug: string) {
+    setSlugEdited(true);
+    onChange({ ...draft, slug });
+  }
+
   return (
     <>
       <Field label="Name">
@@ -108,7 +135,7 @@ function ServiceFields({ draft, onChange }: { draft: Draft; onChange: (draft: Dr
           className={fieldClass}
           required
           value={draft.name}
-          onChange={(event) => onChange({ ...draft, name: event.target.value })}
+          onChange={(event) => setName(event.target.value)}
         />
       </Field>
       <Field label="Slug">
@@ -116,7 +143,7 @@ function ServiceFields({ draft, onChange }: { draft: Draft; onChange: (draft: Dr
           className={fieldClass}
           required
           value={draft.slug}
-          onChange={(event) => onChange({ ...draft, slug: event.target.value })}
+          onChange={(event) => setSlug(event.target.value)}
         />
       </Field>
       <Field label="Description">
@@ -201,17 +228,19 @@ function ServiceEditor({ service }: { service: AdminServiceDto }) {
     setError(null);
     setMessage(null);
     try {
+      const body = toBody(draft);
       await apiFetch(`/admin/services/${encodeURIComponent(service.id)}`, {
         auth: true,
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(toBody(draft)),
+        body: JSON.stringify(body),
       });
+      setDraft({ ...draft, slug: body.slug });
       setMessage("Saved.");
       await queryClient.invalidateQueries({ queryKey: ["admin-services"] });
       await queryClient.invalidateQueries({ queryKey: ["services"] });
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : "The service was not saved.");
+      setError(adminFormError(caught, "The service was not saved."));
     }
   }
 

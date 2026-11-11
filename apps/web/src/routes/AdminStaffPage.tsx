@@ -2,6 +2,7 @@ import type { WorkingHoursDto } from "@nailsbychao/types";
 import { useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useState } from "react";
 import { useAdminServices, useAdminStaff, useStaffHours, useTimeOff } from "@/features/admin/api";
+import { adminFormError } from "@/features/admin/errors";
 import { WEEKDAYS } from "@/features/admin/status";
 import {
   Field,
@@ -11,7 +12,7 @@ import {
   primaryButtonClass,
   secondaryButtonClass,
 } from "@/features/admin/ui";
-import { ApiError, apiFetch } from "@/lib/api";
+import { apiFetch } from "@/lib/api";
 import { formatDay, formatTime, studioDateOf } from "@/lib/datetime";
 
 type HourDraft = {
@@ -87,7 +88,7 @@ function CreateStaff() {
       setName("");
       await queryClient.invalidateQueries({ queryKey: ["admin-staff"] });
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : "The staff member was not saved.");
+      setError(adminFormError(caught, "The staff member was not saved."));
     }
   }
 
@@ -158,7 +159,7 @@ function StaffEditor({
       setMessage("Staff saved.");
       await queryClient.invalidateQueries({ queryKey: ["admin-staff"] });
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : "The staff member was not saved.");
+      setError(adminFormError(caught, "The staff member was not saved."));
     }
   }
 
@@ -271,7 +272,7 @@ function HoursEditor({ staffId, hours }: { staffId: string; hours: WorkingHoursD
       setMessage("Working hours saved. Availability uses them immediately.");
       await queryClient.invalidateQueries({ queryKey: ["admin-hours", staffId] });
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : "The hours were not saved.");
+      setError(adminFormError(caught, "The hours were not saved."));
     }
   }
 
@@ -389,7 +390,7 @@ function TimeOffEditor({
       setForm({ ...form, reason: "" });
       await queryClient.invalidateQueries({ queryKey: ["admin-time-off", staffId] });
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : "Time off was not saved.");
+      setError(adminFormError(caught, "Time off was not saved."));
     }
   }
 
@@ -399,7 +400,7 @@ function TimeOffEditor({
       await apiFetch(`/admin/time-off/${encodeURIComponent(id)}`, { auth: true, method: "DELETE" });
       await queryClient.invalidateQueries({ queryKey: ["admin-time-off", staffId] });
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : "Time off was not removed.");
+      setError(adminFormError(caught, "Time off was not removed."));
     }
   }
 
