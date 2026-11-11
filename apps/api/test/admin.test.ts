@@ -2,6 +2,7 @@ import { env } from "cloudflare:workers";
 import type {
   AdminBookingDto,
   AdminCalendarDto,
+  AdminServiceDto,
   ApiErrorBody,
   ApiSuccess,
   AvailabilityDto,
@@ -14,6 +15,7 @@ import { hashPassword } from "better-auth/crypto";
 import { beforeAll, describe, expect, it } from "vitest";
 import { app } from "../src/app";
 import { createDb } from "../src/db/client";
+import { serviceCreateBody } from "../src/modules/admin/schemas";
 import { reservationSlots } from "../src/modules/availability/availability.engine";
 import { insertAppointmentWithReservations } from "../src/modules/bookings/bookings.repository";
 import { addDays, localToUtc, studioToday, weekdayOf } from "../src/utils/studio-time";
@@ -541,6 +543,107 @@ describe("admin studio management", () => {
     expect(catalog).not.toContain(service.data.id);
   });
 
+  it("normalizes mixed-case and spaced slugs on create and update", async () => {
+    const created = await call(
+      "/api/v1/admin/services",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          name: "Tips",
+          slug: "Tips",
+          description: "Tips +gel application",
+          category: "nails",
+          durationMinutes: 100,
+          priceMinor: 250000,
+          currency: "KES",
+          isActive: true,
+          displayOrder: 10,
+        }),
+      },
+      cookie,
+    );
+    expect(created.status).toBe(201);
+    const createdBody = (await created.json()) as ApiSuccess<AdminServiceDto>;
+    expect(createdBody.data.slug).toBe("tips");
+
+    const spaced = await call(
+      `/api/v1/admin/services/${createdBody.data.id}`,
+      { method: "PATCH", body: JSON.stringify({ slug: "Gel Tips" }) },
+      cookie,
+    );
+    expect(spaced.status).toBe(200);
+    expect(((await spaced.json()) as ApiSuccess<AdminServiceDto>).data.slug).toBe("gel-tips");
+
+    const underscored = await call(
+      `/api/v1/admin/services/${createdBody.data.id}`,
+      { method: "PATCH", body: JSON.stringify({ slug: "Gel_Tips" }) },
+      cookie,
+    );
+    expect(underscored.status).toBe(200);
+    expect(((await underscored.json()) as ApiSuccess<AdminServiceDto>).data.slug).toBe("gel-tips");
+  });
+
+  it("returns the slug rule when the value is still invalid after normalizing", async () => {
+    const response = await call(
+      "/api/v1/admin/services",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          name: "Tips",
+          slug: "Tips!",
+          description: "Tips +gel application",
+          category: "nails",
+          durationMinutes: 100,
+          priceMinor: 250000,
+          currency: "KES",
+          isActive: true,
+          displayOrder: 10,
+        }),
+      },
+      cookie,
+    );
+    expect(response.status).toBe(400);
+    const body = (await response.json()) as ApiErrorBody;
+    expect(body.error.code).toBe("validation_error");
+    expect(body.error.message).toBe("Slug: Use lowercase letters, numbers, and hyphens.");
+  });
+
+  it("keeps slug_taken when a normalized slug already exists", async () => {
+    const response = await call(
+      "/api/v1/admin/services",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          name: "Admin Gel",
+          slug: "Ad Gel",
+          category: "nails",
+          durationMinutes: 60,
+          priceMinor: 150000,
+          isActive: true,
+          displayOrder: 0,
+        }),
+      },
+      cookie,
+    );
+    expect(response.status).toBe(409);
+    const body = (await response.json()) as ApiErrorBody;
+    expect(body.error.code).toBe("slug_taken");
+    expect(body.error.message).toBe("A service already uses that slug.");
+  });
+
+  it("returns the staff field error instead of a generic invalid request", async () => {
+    const response = await call(
+      "/api/v1/admin/staff",
+      { method: "POST", body: JSON.stringify({ name: "", isActive: true }) },
+      cookie,
+    );
+    expect(response.status).toBe(400);
+    const body = (await response.json()) as ApiErrorBody;
+    expect(body.error.code).toBe("validation_error");
+    expect(body.error.message).toMatch(/^Name:/);
+    expect(body.error.message).not.toBe("The request is invalid.");
+  });
+
   it("removes a slot when time off covers it", async () => {
     const startAt = at("14:00");
     const open = await call(`/api/v1/availability?serviceId=ad_svc&date=${MONDAY}&location=studio`);
@@ -800,6 +903,30 @@ describe("admin studio management", () => {
     expect(await appointmentStatus(id)).toBe("pending");
     expect(await slotsFor(id)).toEqual(reservationSlots(new Date(startAt), 60, "studio"));
     await env.DB.prepare("DELETE FROM staff_time_off WHERE staff_id = 'ad_staff'").run();
+  });
+});
+
+describe("service slug schema", () => {
+  const base = {
+    name: "Tips",
+    description: "Tips +gel application",
+    category: "nails" as const,
+    durationMinutes: 100,
+    priceMinor: 250000,
+  };
+
+  it.each([
+    ["Tips", "tips"],
+    ["Gel Tips", "gel-tips"],
+    ["gel_tips", "gel-tips"],
+    ["  Gel   Tips  ", "gel-tips"],
+  ])("normalizes %j to %j", (slug, expected) => {
+    expect(serviceCreateBody.parse({ ...base, slug }).slug).toBe(expected);
+  });
+
+  it("still rejects punctuation after normalizing", () => {
+    const parsed = serviceCreateBody.safeParse({ ...base, slug: "Tips!" });
+    expect(parsed.success).toBe(false);
   });
 });
 
